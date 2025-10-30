@@ -1,0 +1,20 @@
+# Build artifacts
+.aws-sam/
+
+# Terraform state/cache
+infrastructure/.terraform/
+infrastructure/terraform.tfstate
+infrastructure/terraform.tfstate.*
+
+# Node
+node_modules/
+
+# IDE/Editor
+.idea/
+.vscode/
+
+# Env/secrets (adjust as needed)
+.env
+env.json
+
+node_modules
