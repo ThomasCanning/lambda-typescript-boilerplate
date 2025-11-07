@@ -17,8 +17,8 @@ provider "aws" {
 }
 
 locals {
-  jmap_subdomain = "jmap"
-  jmap_fqdn      = "${local.jmap_subdomain}.${var.root_domain_name}"
+  api_subdomain = "api"
+  fqdn      = "${local.api_subdomain}.${var.root_domain_name}"
 }
 
 ########################
@@ -27,7 +27,7 @@ locals {
 
 # Certificate for jmap.domain.com (API Gateway)
 resource "aws_acm_certificate" "api" {
-  domain_name       = local.jmap_fqdn
+  domain_name       = local.fqdn
   validation_method = "DNS"
 }
 
@@ -55,7 +55,7 @@ resource "aws_acm_certificate_validation" "root_autodiscovery" {
 
 resource "aws_apigatewayv2_domain_name" "jmap" {
   count       = var.wait_for_certificate_validation ? 1 : 0
-  domain_name = local.jmap_fqdn
+  domain_name = local.fqdn
   domain_name_configuration {
     certificate_arn = aws_acm_certificate.api.arn
     endpoint_type   = "REGIONAL"
@@ -89,7 +89,7 @@ resource "aws_cloudfront_function" "autodiscovery_redirect" {
           statusCode: 301,
           statusDescription: 'Moved Permanently',
           headers: {
-            location: { value: 'https://${local.jmap_fqdn}/.well-known/jmap' },
+            location: { value: 'https://${local.fqdn}/.well-known/jmap' },
             'cache-control': { value: 'public, max-age=3600' }
           }
         };

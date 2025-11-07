@@ -17,6 +17,10 @@ Parameters:
   RootDomainName:
     Type: String
     Description: Root domain name for the JMAP API (e.g., jmapbox.com)
+  SubDomainName:
+    Type: String
+    Description: Subdomain the api is on
+    Default: "api"
   AdminUsername:
     Type: String
     Description: Admin username (without domain, will be used as username@RootDomainName)
@@ -92,7 +96,7 @@ Resources:
       Handler: src/handlers/well-known-jmap.wellKnownJmapHandler
       Environment:
         Variables:
-          API_URL: !Sub 'https://jmap.${RootDomainName}/jmap'
+          API_URL: !Sub 'https://${SubDomainName}.${RootDomainName}/jmap'
           USER_POOL_CLIENT_ID: !Ref UserPoolClient
       Events:
         Api:
@@ -155,7 +159,7 @@ Resources:
         EntryPoints:
           - src/handlers/auth-logout.ts
 
-  # Lambda function: Get token (requires authentication)
+  # Lambda function: Get token
   authTokenFunction:
     Type: AWS::Serverless::Function
     Properties:
