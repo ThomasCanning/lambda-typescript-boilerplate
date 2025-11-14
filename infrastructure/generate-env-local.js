@@ -1,8 +1,4 @@
-#!/usr/bin/env node
-/**
- * Generates env.json for SAM local development by reading template.yaml
- * and extracting function environment variables.
- */
+//AI Generated script to generate env.json for SAM local development
 
 const fs = require('fs');
 const path = require('path');
