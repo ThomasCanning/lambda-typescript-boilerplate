@@ -1,12 +1,13 @@
 import { APIGatewayProxyEventV2 } from "aws-lambda"
 import { getHeader, parseBasicAuth } from "./headers"
-import { authenticate } from "./cognito"
+import { authenticate, refresh } from "./cognito"
 import { AuthResult } from "./types"
 import { validateEnvVar } from "../env"
 
 interface CredentialsRequestBody {
   username?: string
   password?: string
+  refreshToken?: string
 }
 
 export function extractCredentialsFromEvent(
@@ -17,6 +18,14 @@ export function extractCredentialsFromEvent(
   if (event.body) {
     try {
       const body = JSON.parse(event.body) as CredentialsRequestBody
+      // Check for refresh token first (takes priority)
+      if (body.refreshToken) {
+        return {
+          ok: false,
+          statusCode: 400,
+          message: "Use refreshToken field for token refresh, not credentials",
+        }
+      }
       if (body.username && body.password) {
         return { ok: true, username: body.username, password: body.password }
       }
@@ -52,12 +61,51 @@ export function extractCredentialsFromEvent(
   return basicAuth
 }
 
+export function extractRefreshTokenFromEvent(
+  event: APIGatewayProxyEventV2
+): { ok: true; refreshToken: string } | { ok: false; statusCode: number; message: string } {
+  if (!event.body) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message:
+        'Missing refresh token. Provide refresh token in request body as JSON: {"refreshToken": "..."}',
+    }
+  }
+
+  try {
+    const body = JSON.parse(event.body) as CredentialsRequestBody
+    if (
+      body.refreshToken &&
+      typeof body.refreshToken === "string" &&
+      body.refreshToken.trim().length > 0
+    ) {
+      return { ok: true, refreshToken: body.refreshToken.trim() }
+    }
+    return {
+      ok: false,
+      statusCode: 400,
+      message:
+        'Missing or invalid refreshToken field. Provide refresh token in request body as JSON: {"refreshToken": "..."}',
+    }
+  } catch {
+    return { ok: false, statusCode: 400, message: "Invalid JSON in request body" }
+  }
+}
+
 export async function authenticateRequest(event: APIGatewayProxyEventV2): Promise<AuthResult> {
   const clientIdResult = validateEnvVar("USER_POOL_CLIENT_ID", process.env.USER_POOL_CLIENT_ID)
   if (!clientIdResult.ok) {
     return clientIdResult
   }
 
+  // Check if this is a refresh token request
+  const refreshTokenResult = extractRefreshTokenFromEvent(event)
+  if (refreshTokenResult.ok) {
+    return await refresh(refreshTokenResult.refreshToken, clientIdResult.value)
+  }
+
+  // Otherwise, treat as credentials-based authentication
   const credentials = extractCredentialsFromEvent(event)
   if (!credentials.ok) {
     return credentials

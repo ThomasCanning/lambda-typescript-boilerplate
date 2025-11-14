@@ -35,11 +35,15 @@ Authentication is attempted in this order:
 - Returns 200 with `Set-Cookie` headers
 - Subsequent requests use cookies automatically
 
-**`POST /auth/token`** - API client login (returns JSON)
+**`POST /auth/token`** - API client login or token refresh (returns JSON)
 
-- Same credentials as `/auth/login`
-- Returns 200 with `{"accessToken": "...", "refreshToken": "..."}`
-- Client manages token lifecycle
+- **Initial login**: Same credentials as `/auth/login`
+  - Accepts Basic auth or JSON body: `{"username": "...", "password": "..."}`
+  - Returns 200 with `{"accessToken": "...", "refreshToken": "..."}`
+- **Token refresh**: Send refresh token in body
+  - JSON body: `{"refreshToken": "..."}`
+  - Returns 200 with `{"accessToken": "...", "refreshToken": "..."}` (new tokens)
+- Client manages token lifecycle and refresh
 
 ### Automatic Token Refresh
 

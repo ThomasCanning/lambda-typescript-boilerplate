@@ -80,8 +80,9 @@ Clients can use autodiscovery with:
 
 Desktop/mobile clients should use:
 
-- **Basic Auth** for initial authentication
+- **Basic Auth or JSON** for initial authentication
 - **Bearer tokens** for subsequent requests
+- **Refresh token** to get new tokens when access token expires
 - Clients must manage token refresh manually (no automatic refresh for header-based auth)
 
 ### Example Configuration
@@ -89,13 +90,22 @@ Desktop/mobile clients should use:
 For a desktop client:
 
 ```bash
-# Get access token
-TOKEN=$(curl -s https://jmap.yourdomain.com/auth/token \
-  -u 'user@yourdomain.com:password' | jq -r '.accessToken')
+# 1. Initial login - get tokens
+RESPONSE=$(curl -s https://jmap.yourdomain.com/auth/token \
+  -u 'user@yourdomain.com:password')
+ACCESS_TOKEN=$(echo $RESPONSE | jq -r '.accessToken')
+REFRESH_TOKEN=$(echo $RESPONSE | jq -r '.refreshToken')
 
-# Use token for requests
+# 2. Use access token for requests
 curl https://jmap.yourdomain.com/jmap/session \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# 3. When access token expires (401 error), refresh it
+RESPONSE=$(curl -s -X POST https://jmap.yourdomain.com/auth/token \
+  -H "Content-Type: application/json" \
+  -d "{\"refreshToken\": \"$REFRESH_TOKEN\"}")
+ACCESS_TOKEN=$(echo $RESPONSE | jq -r '.accessToken')
+REFRESH_TOKEN=$(echo $RESPONSE | jq -r '.refreshToken')  # May be updated
 ```
 
 ## Autodiscovery Details
