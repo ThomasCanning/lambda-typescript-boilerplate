@@ -3,7 +3,8 @@ import { APIGatewayProxyEventV2 } from 'aws-lambda'
 export function getHeader(event: APIGatewayProxyEventV2, name: string): string | undefined {
   const h = event.headers
   if (!h) return undefined
-  return h[name.toLowerCase()] as string | undefined
+  // Try exact case first, then lowercase, then uppercase (API Gateway v2 normalizes to lowercase)
+  return (h[name] || h[name.toLowerCase()] || h[name.toUpperCase()]) as string | undefined
 }
 
 function getAllowedOrigins(): string[] {
@@ -64,9 +65,15 @@ export function parseBasicAuth(
     return { ok: false, statusCode: 401, message: 'Missing Basic auth' }
   }
 
+  const base64Part = authorizationHeader.slice(6)
+  // Validate base64 characters (A-Z, a-z, 0-9, +, /, =)
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Part)) {
+    return { ok: false, statusCode: 400, message: 'Invalid Base64' }
+  }
+
   let decoded: string
   try {
-    decoded = Buffer.from(authorizationHeader.slice(6), 'base64').toString('utf8')
+    decoded = Buffer.from(base64Part, 'base64').toString('utf8')
   } catch {
     return { ok: false, statusCode: 400, message: 'Invalid Base64' }
   }

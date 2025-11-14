@@ -17,9 +17,7 @@
   },
   "include": [
     "src/**/*.ts",
-    "__tests__/**/*.ts",
-    "src/**/*.mjs",
-    "__tests__/**/*.mjs"
+    "src/**/*.mjs"
   ],
   "exclude": [
     "node_modules",

@@ -37,6 +37,7 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "__tests__/__mocks__",
+      "__tests__/unit/lib/auth/__setup__",
       "/dist/"
     ],
     "moduleFileExtensions": [

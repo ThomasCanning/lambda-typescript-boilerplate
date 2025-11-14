@@ -28,7 +28,7 @@ export async function verifyBearerFromEvent(
       
       const issuerClaim = decoded.iss
       if (!issuerClaim || typeof issuerClaim !== 'string') {
-        return { ok: false, statusCode: 401, message: 'Invalid token: missing issuer' }
+        return { ok: false, statusCode: 400, message: 'Missing iss' }
       }
 
       if (!issuerClaim.startsWith('https://cognito-idp.') || !issuerClaim.endsWith('.amazonaws.com')) {
@@ -42,7 +42,7 @@ export async function verifyBearerFromEvent(
         error: err.message,
         errorName: err.name,
       })
-      return { ok: false, statusCode: 401, message: 'Invalid token format' }
+      return { ok: false, statusCode: 401, message: 'Invalid token' }
     }
 
     const JWKS = createRemoteJWKSet(new URL(`${iss}/.well-known/jwks.json`))
