@@ -60,3 +60,16 @@ export type CapabilityJmapCore = {
   maxObjectsInGet: UnsignedInt
   maxObjectsInSet: UnsignedInt
 }
+
+// ------------------------------------------------------------
+
+// API types
+
+// Tuple of [method name, arguments, method call id]
+export type Invocation = [string, Record<string, unknown>, string]
+
+export type Request = {
+  using: string[] //capabilities
+  methodCalls: Invocation[]
+  createdIds?: Record<Id, Id> // map from client specified creation id to the id the server assigned when a record was successfully created
+}
