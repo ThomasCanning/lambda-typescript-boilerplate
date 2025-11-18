@@ -1,4 +1,5 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda"
+import { StatusCodes } from "http-status-codes"
 import { withAuth, jsonResponseHeaders, createAuthErrorResponse } from "../../lib/auth"
 import { validateEnvVar } from "../../lib/env"
 import {
@@ -8,6 +9,7 @@ import {
   CapabilityJmapCore,
   UnsignedInt,
   Session,
+  capabilities,
 } from "../../lib/jmap/types"
 
 export const sessionHandler = withAuth(
@@ -44,11 +46,12 @@ export const sessionHandler = withAuth(
       maxCallsInRequest: 16 as UnsignedInt,
       maxObjectsInGet: 500 as UnsignedInt,
       maxObjectsInSet: 500 as UnsignedInt,
+      collationAlgorithms: ["i;ascii-numeric", "i;ascii-casemap", "i;unicode-casemap"],
     }
 
     const session: Session = {
       capabilities: {
-        "urn:ietf:params:jmap:core": capabilityJmapCore,
+        [capabilities.core]: capabilityJmapCore,
       },
       accounts: accounts,
       primaryAccounts: {
@@ -62,10 +65,13 @@ export const sessionHandler = withAuth(
       state: "todo",
     }
 
-    //TODO check this
+    //TODO check this and make dynamic
     return {
-      statusCode: 200,
-      headers: jsonResponseHeaders(event),
+      statusCode: StatusCodes.OK,
+      headers: {
+        ...jsonResponseHeaders(event),
+        "Cache-Control": "no-cache, no-store, must-revalidate", // RFC 8620 Section 2
+      },
       body: JSON.stringify(session),
     }
   }

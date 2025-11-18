@@ -19,7 +19,7 @@ STACK_NAME  ?= $(shell awk -F'=' '/^stack_name/ {gsub(/[ "\r\t]/, "", $$2); prin
 
 .PHONY: deploy tf-apply sam-deploy set-admin-password validate-password validate-dns
 .PHONY: deployment-stage1-complete deployment-complete generate-outputs
-.PHONY: local gen-env-local ensure-config update-s3-endpoint lint test
+.PHONY: local gen-env-local ensure-config update-s3-endpoint lint test npm-install
 
 gen-env-local:
 	@STACK_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].StackId' --output text 2>/dev/null || true); \
@@ -27,7 +27,7 @@ gen-env-local:
 	REG=$(REGION); API_BASE="http://localhost:3001"; \
 	REGION="$$REG" USER_POOL_CLIENT_ID="$$USER_POOL_CLIENT_ID" API_BASE="$$API_BASE" node infrastructure/generate-env-local.js
 
-deploy: ensure-config lint test sam-deploy set-admin-password tf-apply
+deploy: ensure-config npm-install lint test sam-deploy set-admin-password tf-apply
 
 tf-apply:
 	@# Read SAM outputs to feed Terraform variables
@@ -325,6 +325,10 @@ validate-password:
 	  exit 1; \
 	fi
 
+npm-install:
+	@echo "Installing dependencies..."
+	@npm install
+
 sam-deploy: validate-password
 	AWS_REGION=$(REGION) sam build
 	AWS_REGION=$(REGION) sam deploy --no-confirm-changeset --region $(REGION) \
@@ -520,7 +524,7 @@ test:
 	@npm test
 
 # Run backend (SAM) locally
-local:
+local: npm-install
 	@command -v sam >/dev/null || (echo "ERROR: AWS SAM CLI not found"; exit 1)
 	@docker info >/dev/null 2>&1 || (echo "ERROR: Docker is not running"; exit 1)
 	@$(MAKE) gen-env-local >/dev/null || true

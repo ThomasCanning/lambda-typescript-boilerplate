@@ -1,5 +1,6 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda"
-import { AuthenticatedContext, HandlerFunction, AuthResult, isAuthenticatedContext } from "./types"
+import { StatusCodes } from "http-status-codes"
+import { AuthenticatedContext, HandlerFunction, AuthResult } from "./types"
 import { getHeader, jsonResponseHeaders, parseBasicAuth } from "./headers"
 import { getTokenFromCookies } from "./cookies"
 import { setAuthCookies } from "./cookies"
@@ -62,7 +63,7 @@ async function tryRefreshToken(
 
 type BasicAuthResult =
   | AuthResult
-  | { ok: false; statusCode: 401; message: string; skipBasicAuth: true }
+  | { ok: false; statusCode: StatusCodes.UNAUTHORIZED; message: string; skipBasicAuth: true }
 
 async function tryBasicAuth(
   event: APIGatewayProxyEventV2,
@@ -71,7 +72,12 @@ async function tryBasicAuth(
   const authzHeader = getHeader(event, "authorization")
 
   if (authzHeader?.startsWith("Bearer ")) {
-    return { ok: false, statusCode: 401, message: "Bearer token provided", skipBasicAuth: true }
+    return {
+      ok: false,
+      statusCode: StatusCodes.UNAUTHORIZED,
+      message: "Bearer token provided",
+      skipBasicAuth: true,
+    }
   }
 
   const basicAuth = parseBasicAuth(authzHeader)
@@ -109,7 +115,7 @@ async function handleRefreshFlow(
   }
 
   const refreshed = await tryRefreshToken(event, clientId)
-  if (refreshed && isAuthenticatedContext(refreshed)) {
+  if (refreshed && refreshed.ok) {
     const authWithUsername = ensureUsername(refreshed)
     const handlerResponse = await handler(event, authWithUsername)
     return buildResponseWithCookies(
@@ -132,10 +138,14 @@ async function handleBasicAuthFlow(
   const basic = await tryBasicAuth(event, clientId)
 
   if (basic.ok === false && "skipBasicAuth" in basic && basic.skipBasicAuth) {
-    return null // Bearer was provided but invalid, don't try Basic
+    // Bearer token was provided but invalid - return the Bearer error message
+    if (!bearerAuthResult.ok) {
+      return createAuthErrorResponse(event, bearerAuthResult.statusCode, bearerAuthResult.message)
+    }
+    return null
   }
 
-  if (isAuthenticatedContext(basic) && basic.bearerToken) {
+  if (basic.ok && basic.bearerToken) {
     const authWithUsername = ensureUsername(basic)
     const handlerResponse = await handler(event, authWithUsername)
     return buildResponseWithCookies(handlerResponse, event, basic.bearerToken, basic.refreshToken)
@@ -145,7 +155,7 @@ async function handleBasicAuthFlow(
   if (isNoAuthProvided(bearerAuthResult, basic, authzHeader)) {
     return createAuthErrorResponse(
       event,
-      401,
+      StatusCodes.UNAUTHORIZED,
       "No authentication method provided. Call /auth/login with username and password to get an access token, or use Basic auth with the Authorization header."
     )
   }
@@ -190,7 +200,7 @@ export function withAuth(
       // Try Bearer token first
       const bearerAuthResult = await verifyBearerFromEvent(event, clientId)
 
-      if (isAuthenticatedContext(bearerAuthResult)) {
+      if (bearerAuthResult.ok) {
         return await handleBearerSuccess(event, bearerAuthResult, handler)
       }
 
@@ -212,7 +222,7 @@ export function withAuth(
         method: event.requestContext?.http?.method,
         authResultOk: bearerAuthResult.ok,
       })
-      return createAuthErrorResponse(event, 401, "Unauthorized")
+      return createAuthErrorResponse(event, StatusCodes.UNAUTHORIZED, "Unauthorized")
     } catch (error) {
       const err = error as Error
       console.error("[auth] Handler error", {
@@ -222,7 +232,11 @@ export function withAuth(
         errorName: err.name,
         stack: err.stack,
       })
-      return createAuthErrorResponse(event, 500, "Internal server error")
+      return createAuthErrorResponse(
+        event,
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        "Internal server error"
+      )
     }
   }
 }

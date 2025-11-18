@@ -53,15 +53,6 @@ curl -H "Authorization: Bearer <token>" \
   http://localhost:3001/jmap/session
 ```
 
-### Test RPC Endpoint
-
-```bash
-curl -X POST http://localhost:3001/jmap \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"methodCalls":[]}'
-```
-
 ## Running Tests
 
 ### All Tests

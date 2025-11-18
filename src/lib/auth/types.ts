@@ -24,7 +24,3 @@ export type HandlerFunction = (
   event: APIGatewayProxyEventV2,
   auth: AuthenticatedContext
 ) => Promise<APIGatewayProxyStructuredResultV2>
-
-export function isAuthenticatedContext(result: AuthResult): result is AuthenticatedContext {
-  return result.ok === true
-}

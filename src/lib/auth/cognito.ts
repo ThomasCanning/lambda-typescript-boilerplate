@@ -4,6 +4,7 @@ import {
   RevokeTokenCommand,
 } from "@aws-sdk/client-cognito-identity-provider"
 import { NodeHttpHandler } from "@smithy/node-http-handler"
+import { StatusCodes } from "http-status-codes"
 import { AuthResult } from "./types"
 
 let cognitoClient: CognitoIdentityProviderClient | null = null
@@ -28,10 +29,10 @@ export async function authenticate(
   userPoolClientId: string
 ): Promise<AuthResult> {
   if (!username || username.trim().length === 0) {
-    return { ok: false, statusCode: 400, message: "Username is required" }
+    return { ok: false, statusCode: StatusCodes.BAD_REQUEST, message: "Username is required" }
   }
   if (!password || password.length === 0) {
-    return { ok: false, statusCode: 400, message: "Password is required" }
+    return { ok: false, statusCode: StatusCodes.BAD_REQUEST, message: "Password is required" }
   }
 
   try {
@@ -44,7 +45,11 @@ export async function authenticate(
     const token = res.AuthenticationResult?.AccessToken
     const refreshToken = res.AuthenticationResult?.RefreshToken
     if (!token) {
-      return { ok: false, statusCode: 502, message: "No access token from Cognito" }
+      return {
+        ok: false,
+        statusCode: StatusCodes.BAD_GATEWAY,
+        message: "No access token from Cognito",
+      }
     }
     return { ok: true, username, bearerToken: token, refreshToken }
   } catch (e) {
@@ -53,13 +58,13 @@ export async function authenticate(
       error: err.name || "UnknownError",
       usernameLength: username.length,
     })
-    return { ok: false, statusCode: 401, message: "Invalid credentials" }
+    return { ok: false, statusCode: StatusCodes.UNAUTHORIZED, message: "Invalid credentials" }
   }
 }
 
 export async function refresh(refreshToken: string, userPoolClientId: string): Promise<AuthResult> {
   if (!refreshToken || refreshToken.trim().length === 0) {
-    return { ok: false, statusCode: 400, message: "Refresh token is required" }
+    return { ok: false, statusCode: StatusCodes.BAD_REQUEST, message: "Refresh token is required" }
   }
 
   try {
@@ -75,7 +80,11 @@ export async function refresh(refreshToken: string, userPoolClientId: string): P
     const newRefreshToken = res.AuthenticationResult?.RefreshToken || refreshToken
 
     if (!token) {
-      return { ok: false, statusCode: 502, message: "No access token from Cognito" }
+      return {
+        ok: false,
+        statusCode: StatusCodes.BAD_GATEWAY,
+        message: "No access token from Cognito",
+      }
     }
     return { ok: true, bearerToken: token, refreshToken: newRefreshToken }
   } catch (e) {
@@ -83,7 +92,11 @@ export async function refresh(refreshToken: string, userPoolClientId: string): P
     console.error("[auth] RefreshToken error", {
       error: err.name || "UnknownError",
     })
-    return { ok: false, statusCode: 401, message: "Invalid or expired refresh token" }
+    return {
+      ok: false,
+      statusCode: StatusCodes.UNAUTHORIZED,
+      message: "Invalid or expired refresh token",
+    }
   }
 }
 
@@ -104,6 +117,10 @@ export async function revokeToken(
       error: err.name || "UnknownError",
       errorMessage: err.message,
     })
-    return { ok: false, statusCode: 500, message: "Failed to revoke token" }
+    return {
+      ok: false,
+      statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+      message: "Failed to revoke token",
+    }
   }
 }

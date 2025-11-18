@@ -92,7 +92,7 @@ Resources:
       DesiredDeliveryMediums: []
       ForceAliasCreation: false
 
-  # JMAP API ENDPOINTS
+  # JMAP ENDPOINTS
   jmapSessionFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -117,11 +117,10 @@ Resources:
         EntryPoints:
           - src/handlers/jmap/session.ts
 
-  # Lambda function: JMAP RPC endpoint (POST)
-  jmapFunction:
+  jmapApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/jmap/rpc.jmapHandler
+      Handler: src/handlers/jmap/api.apiHandler
       Environment:
         Variables:
           USER_POOL_CLIENT_ID: !Ref UserPoolClient
@@ -130,7 +129,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref JmapHttpApi
-            Path: /jmap
+            Path: /jmap/api
             Method: POST
     Metadata:
       BuildMethod: esbuild
@@ -139,7 +138,7 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/jmap/rpc.ts
+          - src/handlers/jmap/api.ts
 
   # END OF JMAP API ENDPOINTS
 

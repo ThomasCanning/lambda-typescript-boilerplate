@@ -20,8 +20,6 @@ RFC 8620 compliant JMAP server with autodiscovery support, built on AWS serverle
 - **Protocol**: RFC 8620 JMAP Core
 - **Infrastructure**: Serverless (AWS SAM + Terraform)
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture information.
-
 ## Prerequisites
 
 - **AWS SAM CLI** - [Install](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
@@ -64,7 +62,6 @@ See [docs/DEPLOYMENT_FLOW.md](docs/DEPLOYMENT_FLOW.md) for complete deployment i
 - **[Authentication](docs/AUTHENTICATION.md)** - Authentication flows and token management
 - **[API Examples](docs/API_EXAMPLES.md)** - Example API commands
 - **[Client Configuration](docs/CLIENT_CONFIGURATION.md)** - How to configure web, desktop, and mobile clients
-- **[Architecture](docs/ARCHITECTURE.md)** - Detailed architecture and components
 - **[Local Development](docs/LOCAL_DEVELOPMENT.md)** - Running and testing locally
 
 ## Testing

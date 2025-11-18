@@ -18,6 +18,9 @@ export type Date = string & { readonly __brand: "JmapDate" }
 /** UTCDate: Date with time-offset "Z" (UTC) */
 export type UTCDate = Date & { readonly __brand: "JmapUTCDate" }
 
+//TODO IJSON type
+export type JsonValue = ReturnType<typeof JSON.parse>
+
 // ------------------------------------------------------------
 
 // Session types
@@ -59,4 +62,35 @@ export type CapabilityJmapCore = {
   maxCallsInRequest: UnsignedInt
   maxObjectsInGet: UnsignedInt
   maxObjectsInSet: UnsignedInt
+  collationAlgorithms: string[]
+}
+
+export const capabilities = {
+  core: "urn:ietf:params:jmap:core",
+} as const
+
+// ------------------------------------------------------------
+
+// API types
+
+// Tuple of [method name, arguments, method call id]
+export type Invocation = [string, Record<string, unknown>, string]
+
+export type JmapRequest = {
+  using: string[] //capabilities
+  methodCalls: Invocation[]
+  createdIds?: Record<Id, Id> // map from client specified creation id to the id the server assigned when a record was successfully created
+}
+
+export type JmapResponse = {
+  methodResponses: Invocation[]
+  createdIds?: Record<Id, Id>
+  sessionState: string
+}
+
+// TODO implement usage of this in api handler
+export type ResultReference = {
+  resultOf: string
+  name: string
+  path: string
 }

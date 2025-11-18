@@ -6,6 +6,7 @@ import {
   parseBasicAuth,
 } from "../../../../src/lib/auth/headers"
 import { createBaseEvent } from "./__setup__"
+import { StatusCodes } from "http-status-codes"
 
 describe("headers", () => {
   describe("getHeader", () => {
@@ -99,7 +100,7 @@ describe("headers", () => {
       const result = parseBasicAuth(undefined)
       expect(result.ok).toBe(false)
       if (!result.ok) {
-        expect(result.statusCode).toBe(401)
+        expect(result.statusCode).toBe(StatusCodes.UNAUTHORIZED)
         expect(result.message).toBe("Missing Basic auth")
       }
     })
@@ -108,7 +109,7 @@ describe("headers", () => {
       const result = parseBasicAuth("Bearer token123")
       expect(result.ok).toBe(false)
       if (!result.ok) {
-        expect(result.statusCode).toBe(401)
+        expect(result.statusCode).toBe(StatusCodes.UNAUTHORIZED)
         expect(result.message).toBe("Missing Basic auth")
       }
     })
@@ -117,7 +118,7 @@ describe("headers", () => {
       const result = parseBasicAuth("Basic !!!invalid!!!")
       expect(result.ok).toBe(false)
       if (!result.ok) {
-        expect(result.statusCode).toBe(400)
+        expect(result.statusCode).toBe(StatusCodes.UNAUTHORIZED)
         expect(result.message).toBe("Invalid Base64")
       }
     })
@@ -127,7 +128,7 @@ describe("headers", () => {
       const result = parseBasicAuth(authHeader)
       expect(result.ok).toBe(false)
       if (!result.ok) {
-        expect(result.statusCode).toBe(400)
+        expect(result.statusCode).toBe(StatusCodes.UNAUTHORIZED)
         expect(result.message).toBe("Invalid Basic format")
       }
     })

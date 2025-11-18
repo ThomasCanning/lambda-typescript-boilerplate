@@ -1,4 +1,5 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda"
+import { StatusCodes } from "http-status-codes"
 import {
   clearAccessTokenCookie,
   clearRefreshTokenCookie,
@@ -32,7 +33,7 @@ export const handler = async (
 
   // Clear cookies regardless of revocation result
   return {
-    statusCode: 204,
+    statusCode: StatusCodes.NO_CONTENT,
     headers: corsOnlyHeaders(event),
     cookies: [clearAccessTokenCookie(), clearRefreshTokenCookie()],
     body: "",
