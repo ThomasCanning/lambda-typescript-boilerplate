@@ -84,6 +84,7 @@ export const apiHandler = withAuth(
       }
     }
 
+    // TODO validate limits
     // Process the request
     try {
       const response = processRequest(requestAsSchema.data as JmapRequest)

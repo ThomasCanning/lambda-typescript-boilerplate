@@ -9,6 +9,7 @@ import {
   CapabilityJmapCore,
   UnsignedInt,
   Session,
+  capabilities,
 } from "../../lib/jmap/types"
 
 export const sessionHandler = withAuth(
@@ -45,11 +46,12 @@ export const sessionHandler = withAuth(
       maxCallsInRequest: 16 as UnsignedInt,
       maxObjectsInGet: 500 as UnsignedInt,
       maxObjectsInSet: 500 as UnsignedInt,
+      collationAlgorithms: ["i;ascii-numeric", "i;ascii-casemap", "i;unicode-casemap"],
     }
 
     const session: Session = {
       capabilities: {
-        "urn:ietf:params:jmap:core": capabilityJmapCore,
+        [capabilities.core]: capabilityJmapCore,
       },
       accounts: accounts,
       primaryAccounts: {
@@ -63,7 +65,7 @@ export const sessionHandler = withAuth(
       state: "todo",
     }
 
-    //TODO check this
+    //TODO check this and make dynamic
     return {
       statusCode: StatusCodes.OK,
       headers: jsonResponseHeaders(event),

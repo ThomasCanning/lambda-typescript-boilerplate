@@ -62,7 +62,12 @@ export type CapabilityJmapCore = {
   maxCallsInRequest: UnsignedInt
   maxObjectsInGet: UnsignedInt
   maxObjectsInSet: UnsignedInt
+  collationAlgorithms: string[]
 }
+
+export const capabilities = {
+  core: "urn:ietf:params:jmap:core",
+} as const
 
 // ------------------------------------------------------------
 
