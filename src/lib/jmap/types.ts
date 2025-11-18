@@ -86,5 +86,3 @@ export type ResultReference = {
   name: string
   path: string
 }
-
-//implement helper for result reference according to algorithm
