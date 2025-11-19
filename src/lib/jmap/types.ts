@@ -88,9 +88,21 @@ export type JmapResponse = {
   sessionState: string
 }
 
-// TODO implement usage of this in api handler
 export type ResultReference = {
   resultOf: string
   name: string
   path: string
+}
+
+export type GetRequestArgs = {
+  accountId: Id
+  ids: Id[] | null //Ids of object to return, null = all if supported and doesn't exceed limit
+  properties: string[] | null //optionally restrict properties returned
+}
+
+export type GetResponseArgs = {
+  accountId: Id
+  state: string
+  list: JsonValue[]
+  notFound: Id[]
 }
