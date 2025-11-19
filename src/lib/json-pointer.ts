@@ -1,4 +1,4 @@
-import { JsonValue } from "../types"
+import { JsonValue } from "./jmap/types"
 
 // Implements JSON Pointer algorithm [RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)
 // With wildcard modification as described in [JMAP RFC 8620](https://www.rfc-editor.org/rfc/rfc8620)

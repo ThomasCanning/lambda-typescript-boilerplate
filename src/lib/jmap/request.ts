@@ -1,7 +1,8 @@
 import { Invocation, JmapRequest, JmapResponse, ResultReference } from "./types"
-import { evaluateJsonPointer } from "./json-pointer"
+import { evaluateJsonPointer } from "../json-pointer"
 import { JsonValue } from "./types"
 import { methodErrors } from "./errors"
+import { coreEcho } from "./core/echo"
 
 export function processRequest(request: JmapRequest): JmapResponse {
   // Track the responses for each method call
@@ -62,9 +63,22 @@ export function processRequest(request: JmapRequest): JmapResponse {
       continue
     }
 
-    // TODO Actually process the method here
+    let methodResponse: Invocation
+    switch (methodName) {
+      case "Core/echo":
+        methodResponse = coreEcho(methodCall)
+        break
+      default:
+        methodResponse = [
+          "error",
+          {
+            type: methodErrors.unknownMethod,
+          },
+          methodCallId,
+        ]
+    }
 
-    methodResponses.push([methodName, {}, methodCallId])
+    methodResponses.push(methodResponse)
   }
 
   return {

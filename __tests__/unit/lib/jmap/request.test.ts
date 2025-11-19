@@ -1,6 +1,23 @@
 import { processRequest } from "../../../../src/lib/jmap/request"
 import { JmapRequest, JmapResponse, Id } from "../../../../src/lib/jmap/types"
 import { RequestError, methodErrors } from "../../../../src/lib/jmap/errors"
+import { coreEcho } from "../../../../src/lib/jmap/core/echo"
+
+jest.mock("../../../../src/lib/jmap/core/echo", () => ({
+  coreEcho: jest.fn((methodCall) => methodCall),
+}))
+
+const mockedCoreEcho = coreEcho as jest.MockedFunction<typeof coreEcho>
+
+beforeEach(() => {
+  mockedCoreEcho.mockImplementation((methodCall) => methodCall)
+})
+
+afterEach(() => {
+  jest.clearAllMocks()
+})
+
+const CORE_ECHO = "Core/echo"
 
 describe("processRequest", () => {
   describe("Basic request processing", () => {
@@ -8,8 +25,8 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", { arg1: "value1" }, "c1"],
-          ["Method2", { arg2: "value2" }, "c2"],
+          [CORE_ECHO, { arg1: "value1" }, "c1"],
+          [CORE_ECHO, { arg2: "value2" }, "c2"],
         ],
       }
 
@@ -18,8 +35,8 @@ describe("processRequest", () => {
       expect("methodResponses" in result).toBe(true)
       if ("methodResponses" in result) {
         expect(result.methodResponses).toHaveLength(2)
-        expect(result.methodResponses[0]).toEqual(["Method1", {}, "c1"])
-        expect(result.methodResponses[1]).toEqual(["Method2", {}, "c2"])
+        expect(result.methodResponses[0]).toEqual([CORE_ECHO, { arg1: "value1" }, "c1"])
+        expect(result.methodResponses[1]).toEqual([CORE_ECHO, { arg2: "value2" }, "c2"])
         expect(result.createdIds).toBe(request.createdIds)
         expect(result.sessionState).toBe("todo")
       }
@@ -28,7 +45,7 @@ describe("processRequest", () => {
     it("should preserve createdIds if present", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
-        methodCalls: [["Method1", {}, "c1"]],
+        methodCalls: [[CORE_ECHO, {}, "c1"]],
         createdIds: {
           "client-id-1": "server-id-1",
           "client-id-2": "server-id-2",
@@ -49,7 +66,7 @@ describe("processRequest", () => {
     it("should handle request without createdIds", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
-        methodCalls: [["Method1", {}, "c1"]],
+        methodCalls: [[CORE_ECHO, {}, "c1"]],
       }
 
       const result = processRequest(request)
@@ -58,6 +75,26 @@ describe("processRequest", () => {
       if ("methodResponses" in result) {
         expect(result.createdIds).toBeUndefined()
       }
+    })
+
+    it("should return unknownMethod error for unsupported method calls", () => {
+      const request: JmapRequest = {
+        using: ["urn:ietf:params:jmap:core"],
+        methodCalls: [["Foo/bar", {}, "c1"]],
+      }
+
+      const result = processRequest(request)
+
+      expect("methodResponses" in result).toBe(true)
+      if ("methodResponses" in result) {
+        expect(result.methodResponses).toHaveLength(1)
+        expect(result.methodResponses[0]).toEqual([
+          "error",
+          { type: methodErrors.unknownMethod },
+          "c1",
+        ])
+      }
+      expect(mockedCoreEcho).not.toHaveBeenCalled()
     })
   })
 
@@ -70,13 +107,13 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/result",
               },
             },
@@ -102,13 +139,13 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "",
               },
             },
@@ -129,13 +166,13 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/data/nested/value",
               },
             },
@@ -161,18 +198,18 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/prop1",
               },
               "#ref2": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/prop2",
               },
             },
@@ -198,15 +235,15 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
-          ["Method2", {}, "c2"],
-          ["Method3", {}, "c3"],
+          [CORE_ECHO, {}, "c1"],
+          [CORE_ECHO, {}, "c2"],
+          [CORE_ECHO, {}, "c3"],
           [
             "Method4",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/result",
               },
             },
@@ -232,14 +269,14 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
-          ["Method1", {}, "c2"], // Same method name, different ID
+          [CORE_ECHO, {}, "c1"],
+          [CORE_ECHO, {}, "c2"], // Same method name, different ID
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1", // Should match first Method1, not second
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/result",
               },
             },
@@ -299,7 +336,7 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
@@ -320,7 +357,7 @@ describe("processRequest", () => {
       if ("methodResponses" in result) {
         expect(result.methodResponses).toHaveLength(2)
         // First method should succeed
-        expect(result.methodResponses[0]).toEqual(["Method1", {}, "c1"])
+        expect(result.methodResponses[0]).toEqual([CORE_ECHO, {}, "c1"])
         // Second method should have error
         const errorResponse = result.methodResponses[1]
         expect(errorResponse[0]).toBe("error")
@@ -335,13 +372,13 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/nonexistent/path", // Path that doesn't exist
               },
             },
@@ -356,7 +393,7 @@ describe("processRequest", () => {
       if ("methodResponses" in result) {
         expect(result.methodResponses).toHaveLength(2)
         // First method should succeed
-        expect(result.methodResponses[0]).toEqual(["Method1", {}, "c1"])
+        expect(result.methodResponses[0]).toEqual([CORE_ECHO, {}, "c1"])
         // Second method should have error
         const errorResponse = result.methodResponses[1]
         expect(errorResponse[0]).toBe("error")
@@ -371,13 +408,13 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "invalid-pointer", // Invalid: doesn't start with /
               },
             },
@@ -392,7 +429,7 @@ describe("processRequest", () => {
       if ("methodResponses" in result) {
         expect(result.methodResponses).toHaveLength(2)
         // First method should succeed
-        expect(result.methodResponses[0]).toEqual(["Method1", {}, "c1"])
+        expect(result.methodResponses[0]).toEqual([CORE_ECHO, {}, "c1"])
         // Second method should have error
         const errorResponse = result.methodResponses[1]
         expect(errorResponse[0]).toBe("error")
@@ -413,13 +450,13 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/items/0",
               },
             },
@@ -445,13 +482,13 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/a~1b", // Should decode to "a/b"
               },
             },
@@ -477,13 +514,13 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/items/*/id", // Wildcard path
               },
             },
@@ -557,14 +594,14 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               normalArg: "value",
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/result",
               },
               anotherArg: 42,
@@ -631,18 +668,18 @@ describe("processRequest", () => {
       const request: JmapRequest = {
         using: ["urn:ietf:params:jmap:core"],
         methodCalls: [
-          ["Method1", {}, "c1"],
+          [CORE_ECHO, {}, "c1"],
           [
             "Method2",
             {
               "#ref1": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/result1",
               },
               "#ref2": {
                 resultOf: "c1",
-                name: "Method1",
+                name: CORE_ECHO,
                 path: "/result2",
               },
             },
