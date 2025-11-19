@@ -232,3 +232,27 @@ export type Comparator = {
   isAscending?: boolean //default true
   collation?: string
 }
+
+export type QueryChangesRequestArgs<T extends Record<string, unknown> = Record<string, unknown>> = {
+  accountId: Id
+  filter?: FilterOperator<T> | FilterCondition<T> | null
+  sort?: Comparator[] | null
+  sinceQueryState: string
+  maxChanges?: UnsignedInt | null
+  upToId?: Id | null
+  calculateTotal?: boolean //default false
+}
+
+export type QueryChangesResponseArgs = {
+  accountId: Id
+  oldQueryState: string
+  newQueryState: string
+  total?: UnsignedInt
+  removed: Id[]
+  added: AddedItem[]
+}
+
+export type AddedItem = {
+  id: Id
+  index: UnsignedInt
+}

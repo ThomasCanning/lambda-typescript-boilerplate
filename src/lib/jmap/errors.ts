@@ -40,6 +40,9 @@ export const methodErrors = {
   anchorNotFound: "anchorNotFound",
   unsupportedSort: "unsupportedSort",
   unsupportedFilter: "unsupportedFilter",
+  //QuerySet response errors
+  tooManyChanges: "tooManyChanges",
+  cannotCalculateChanges: "cannotCalculateChanges",
 } as const
 
 export type MethodErrorType = (typeof methodErrors)[keyof typeof methodErrors]
