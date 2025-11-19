@@ -140,6 +140,29 @@ Resources:
         EntryPoints:
           - src/handlers/jmap/api.ts
 
+  jmapUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/jmap/upload.uploadHandler
+      Environment:
+        Variables:
+          USER_POOL_CLIENT_ID: !Ref UserPoolClient
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JmapHttpApi
+            Path: /upload/{accountId}
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/jmap/upload.ts
+
   # END OF JMAP API ENDPOINTS
 
   # AUTH API ENDPOINTS

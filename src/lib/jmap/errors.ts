@@ -52,3 +52,10 @@ export type MethodError = {
   status: number
   detail: string
 }
+
+export type ProblemDetails = {
+  type: string
+  status: number
+  detail: string
+  title?: string
+}

@@ -8,7 +8,7 @@ import {
   UnsignedInt,
 } from "./types"
 
-const capabilityJmapCore: CapabilityJmapCore = {
+export const capabilityJmapCore: CapabilityJmapCore = {
   maxSizeUpload: 50000000 as UnsignedInt,
   maxConcurrentUpload: 4 as UnsignedInt,
   maxSizeRequest: 10000000 as UnsignedInt,
