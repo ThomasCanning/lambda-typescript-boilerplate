@@ -163,6 +163,29 @@ Resources:
         EntryPoints:
           - src/handlers/jmap/upload.ts
 
+  jmapDownloadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/jmap/download.downloadHandler
+      Environment:
+        Variables:
+          USER_POOL_CLIENT_ID: !Ref UserPoolClient
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JmapHttpApi
+            Path: /jmap/download/{accountId}/{blobId}/{name}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/jmap/download.ts
+
   # END OF JMAP API ENDPOINTS
 
   # AUTH API ENDPOINTS

@@ -1,19 +1,9 @@
-import { Id, UnsignedInt } from "../types"
-import { BlobResponse } from "./types"
-import { newBlobId } from "../id"
+import { Id } from "../types"
 
-export async function upload(
-  accountId: Id,
-  contentType: string,
-  data: Buffer
-): Promise<BlobResponse> {
-  const blobId = newBlobId(data)
-  const blobResponse: BlobResponse = {
-    accountId: accountId,
-    blobId: blobId,
-    type: contentType,
-    size: data.length as UnsignedInt,
-  }
+export async function download(_accountId: Id, _blobId: Id): Promise<Buffer> {
+  //TODO download blob from storage
+  //return ProblemDetails error if failed
 
-  return blobResponse
+  // Mock data for now
+  return Buffer.from("blob data", "utf-8")
 }
