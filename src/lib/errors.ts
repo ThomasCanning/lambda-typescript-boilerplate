@@ -19,6 +19,5 @@ export function createProblemDetails(options: ProblemDetails): ProblemDetails {
     status: options.status,
     detail: options.detail,
     title: options.title,
-    instance: options.instance,
   }
 }

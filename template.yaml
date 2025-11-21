@@ -5,7 +5,7 @@
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/format-version-structure.html
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  jmap-server
+  Serverless lambda implementation of the JMAP protocol for email
 
 # Transform section specifies one or more macros that AWS CloudFormation uses to process your template
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/transform-section-structure.html
@@ -52,6 +52,8 @@ Globals:
     Environment:
       Variables:
         ALLOWED_ORIGINS: !Join [',', !Ref AllowedClientOrigins]
+        API_URL: !Sub 'https://${SubDomainName}.${RootDomainName}'
+        USER_POOL_CLIENT_ID: !Ref UserPoolClient
 
 # Resources declares the AWS resources that you want to include in the stack
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
@@ -111,11 +113,9 @@ Resources:
       Handler: src/handlers/jmap/session.sessionHandler
       Environment:
         Variables:
-          API_URL: !Sub 'https://${SubDomainName}.${RootDomainName}'
           DOWNLOAD_URL: !Sub 'https://${SubDomainName}.${RootDomainName}/jmap${DownloadUrl}'
           UPLOAD_URL: !Sub 'https://${SubDomainName}.${RootDomainName}/jmap${UploadUrl}'
           EVENT_SOURCE_URL: !Sub 'https://${SubDomainName}.${RootDomainName}/jmap${EventSourceUrl}'
-          USER_POOL_CLIENT_ID: !Ref UserPoolClient
       Events:
         Api:
           Type: HttpApi
@@ -136,9 +136,6 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/jmap/api.apiHandler
-      Environment:
-        Variables:
-          USER_POOL_CLIENT_ID: !Ref UserPoolClient
       Events:
         Api:
           Type: HttpApi
@@ -159,9 +156,6 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/jmap/upload.uploadHandler
-      Environment:
-        Variables:
-          USER_POOL_CLIENT_ID: !Ref UserPoolClient
       Events:
         Api:
           Type: HttpApi
@@ -182,9 +176,6 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/jmap/download.downloadHandler
-      Environment:
-        Variables:
-          USER_POOL_CLIENT_ID: !Ref UserPoolClient
       Events:
         Api:
           Type: HttpApi
@@ -209,9 +200,6 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/auth/logout.handler
-      Environment:
-        Variables:
-          USER_POOL_CLIENT_ID: !Ref UserPoolClient
       Events:
         Api:
           Type: HttpApi
@@ -232,9 +220,6 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/auth/login.handler
-      Environment:
-        Variables:
-          USER_POOL_CLIENT_ID: !Ref UserPoolClient
       Events:
         Api:
           Type: HttpApi
@@ -255,9 +240,6 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/auth/token.handler
-      Environment:
-        Variables:
-          USER_POOL_CLIENT_ID: !Ref UserPoolClient
       Events:
         Api:
           Type: HttpApi

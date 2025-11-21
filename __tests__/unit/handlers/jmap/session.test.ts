@@ -26,13 +26,24 @@ jest.mock("../../../../src/lib/auth", () => {
 
 describe("sessionHandler", () => {
   const ORIGINAL_API_URL = process.env.API_URL
+  const ORIGINAL_DOWNLOAD_URL = process.env.DOWNLOAD_URL
+  const ORIGINAL_UPLOAD_URL = process.env.UPLOAD_URL
+  const ORIGINAL_EVENT_SOURCE_URL = process.env.EVENT_SOURCE_URL
 
   beforeEach(() => {
     process.env.API_URL = "https://jmap.example.com/"
+    process.env.DOWNLOAD_URL =
+      "https://jmap.example.com/download/{accountId}/{blobId}?type={type}&name={name}"
+    process.env.UPLOAD_URL = "https://jmap.example.com/upload/{accountId}"
+    process.env.EVENT_SOURCE_URL =
+      "https://jmap.example.com/events?types={types}&closeafter={closeafter}&ping={ping}"
   })
 
   afterEach(() => {
     process.env.API_URL = ORIGINAL_API_URL
+    process.env.DOWNLOAD_URL = ORIGINAL_DOWNLOAD_URL
+    process.env.UPLOAD_URL = ORIGINAL_UPLOAD_URL
+    process.env.EVENT_SOURCE_URL = ORIGINAL_EVENT_SOURCE_URL
   })
 
   it("returns 200 and JSON payload on GET", async () => {
