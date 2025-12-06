@@ -29,6 +29,21 @@ Parameters:
     Type: CommaDelimitedList
     Description: "Comma-separated allowed CORS origins (e.g., https://example.com,https://second.com,http://localhost:5173)"
     Default: "http://localhost:5173"
+  VertexAiApiKey:
+    Type: String
+    Description: "Vertex AI API Key"
+    NoEcho: true
+  GoogleVertexProject:
+    Type: String
+    Description: "Google Vertex Project ID"
+  GoogleVertexLocation:
+    Type: String
+    Description: "Google Vertex Location"
+    Default: "us-central1"
+  GoogleApplicationCredentials:
+    Type: String
+    Description: "Path to Google Application Credentials file"
+    Default: "./google-credentials.json"
 
 # Globals section for shared function and API Gateway configuration
 Globals:
@@ -43,6 +58,10 @@ Globals:
         BASE_URL: !Sub 'https://${SubDomainName}.${RootDomainName}'
         USER_POOL_CLIENT_ID: !Ref UserPoolClient
         USER_POOL_ID: !Ref UserPool
+        VERTEX_AI_API_KEY: !Ref VertexAiApiKey
+        GOOGLE_VERTEX_PROJECT: !Ref GoogleVertexProject
+        GOOGLE_VERTEX_LOCATION: !Ref GoogleVertexLocation
+        GOOGLE_APPLICATION_CREDENTIALS: !Ref GoogleApplicationCredentials
 
 # Resources declares the AWS resources that you want to include in the stack
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html

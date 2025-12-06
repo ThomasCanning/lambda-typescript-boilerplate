@@ -22,3 +22,6 @@ env.json
 config.mk
 dns-records.txt
 variableoutputs.txt
+
+# Google credentials
+google-credentials.json

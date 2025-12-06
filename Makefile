@@ -12,6 +12,10 @@
 -include .env
 export ADMIN_USERNAME
 export ADMIN_PASSWORD
+export VERTEX_AI_API_KEY
+export GOOGLE_VERTEX_PROJECT
+export GOOGLE_VERTEX_LOCATION
+export GOOGLE_APPLICATION_CREDENTIALS
 
 TF_DIR      ?= infrastructure
 # Derive SAM stack name from samconfig.toml if not provided via env
@@ -304,7 +308,11 @@ sam-deploy: validate-password
 		--parameter-overrides \
 			RootDomainName=$(ROOT_DOMAIN) \
 			AdminUsername=$(or $(ADMIN_USERNAME),admin) \
-			AllowedClientOrigins="$(or $(ALLOWED_ORIGINS),http://localhost:5173)"
+			AllowedClientOrigins="$(or $(ALLOWED_ORIGINS),http://localhost:5173)" \
+			VertexAiApiKey=$(VERTEX_AI_API_KEY) \
+			GoogleVertexProject=$(GOOGLE_VERTEX_PROJECT) \
+			GoogleVertexLocation=$(or $(GOOGLE_VERTEX_LOCATION),us-central1) \
+			GoogleApplicationCredentials=$(or $(GOOGLE_APPLICATION_CREDENTIALS),./google-credentials.json)
 
 set-admin-password: validate-password
 	@echo "Setting admin user password..."

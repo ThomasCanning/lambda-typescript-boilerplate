@@ -12,6 +12,10 @@ const region = process.env.REGION || process.env.AWS_REGION || 'eu-west-2';
 const userPoolClientId = process.env.USER_POOL_CLIENT_ID || '';
 const userPoolId = process.env.USER_POOL_ID || '';
 const apiBase = process.env.API_BASE || 'http://localhost:3001';
+const vertexAiApiKey = process.env.VERTEX_AI_API_KEY || '';
+const googleVertexProject = process.env.GOOGLE_VERTEX_PROJECT || '';
+const googleVertexLocation = process.env.GOOGLE_VERTEX_LOCATION || 'us-central1';
+const googleApplicationCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS || './google-credentials.json';
 
 // Read and parse template.yaml
 // Suppress warnings about CloudFormation intrinsic functions (!Ref, !Sub, etc.)
@@ -57,6 +61,26 @@ for (const [resourceName, resource] of Object.entries(template.Resources || {}))
     // Check for BASE_URL
     if (functionEnvVars.BASE_URL !== undefined || globalEnvVars.BASE_URL !== undefined) {
       envVars.BASE_URL = apiBase;
+    }
+    
+    // Check for VERTEX_AI_API_KEY
+    if (functionEnvVars.VERTEX_AI_API_KEY !== undefined || globalEnvVars.VERTEX_AI_API_KEY !== undefined) {
+      envVars.VERTEX_AI_API_KEY = vertexAiApiKey;
+    }
+    
+    // Check for GOOGLE_VERTEX_PROJECT
+    if (functionEnvVars.GOOGLE_VERTEX_PROJECT !== undefined || globalEnvVars.GOOGLE_VERTEX_PROJECT !== undefined) {
+      envVars.GOOGLE_VERTEX_PROJECT = googleVertexProject;
+    }
+    
+    // Check for GOOGLE_VERTEX_LOCATION
+    if (functionEnvVars.GOOGLE_VERTEX_LOCATION !== undefined || globalEnvVars.GOOGLE_VERTEX_LOCATION !== undefined) {
+      envVars.GOOGLE_VERTEX_LOCATION = googleVertexLocation;
+    }
+    
+    // Check for GOOGLE_APPLICATION_CREDENTIALS
+    if (functionEnvVars.GOOGLE_APPLICATION_CREDENTIALS !== undefined || globalEnvVars.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
+      envVars.GOOGLE_APPLICATION_CREDENTIALS = googleApplicationCredentials;
     }
     
     // Add AWS_REGION for local dev if likely needed (Cognito usage)
