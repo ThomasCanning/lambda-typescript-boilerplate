@@ -20,6 +20,7 @@ STACK_NAME  ?= $(shell awk -F'=' '/^stack_name/ {gsub(/[ "\r\t]/, "", $$2); prin
 .PHONY: deploy tf-apply sam-deploy set-admin-password validate-password validate-dns
 .PHONY: deployment-stage1-complete deployment-complete generate-outputs
 .PHONY: local gen-env-local ensure-config update-s3-endpoint lint test npm-install
+.PHONY: deploy-frontend
 
 gen-env-local:
 	@STACK_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].StackId' --output text 2>/dev/null || true); \
@@ -28,7 +29,7 @@ gen-env-local:
 	REG=$(REGION); API_BASE="http://localhost:3001"; \
 	REGION="$$REG" USER_POOL_CLIENT_ID="$$USER_POOL_CLIENT_ID" USER_POOL_ID="$$USER_POOL_ID" API_BASE="$$API_BASE" node infrastructure/generate-env-local.js
 
-deploy: ensure-config npm-install lint test sam-deploy set-admin-password tf-apply
+deploy: ensure-config npm-install lint test sam-deploy set-admin-password tf-apply deploy-frontend
 
 tf-apply:
 	@# Read SAM outputs to feed Terraform variables
@@ -57,38 +58,19 @@ tf-apply:
 		fi; \
 	fi; \
 	if [ "$$CERTS_VALIDATED" = "true" ]; then \
-		if [ "$(SERVE_WEB_CLIENT)" = "yes" ] && [ -n "$(WEB_CLIENT_S3_ENDPOINT)" ]; then \
-			AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
-				-var="region=$(REGION)" \
-				-var="root_domain_name=$(ROOT_DOMAIN)" \
-				-var="sam_http_api_id=$$HTTP_API_ID" \
-				-var="web_client_s3_endpoint=$(WEB_CLIENT_S3_ENDPOINT)" \
-				-var="wait_for_certificate_validation=true" \
-				-auto-approve; \
-		else \
-			AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
-				-var="region=$(REGION)" \
-				-var="root_domain_name=$(ROOT_DOMAIN)" \
-				-var="sam_http_api_id=$$HTTP_API_ID" \
-				-var="wait_for_certificate_validation=true" \
-				-auto-approve; \
-		fi; \
+		AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
+			-var="region=$(REGION)" \
+			-var="root_domain_name=$(ROOT_DOMAIN)" \
+			-var="sam_http_api_id=$$HTTP_API_ID" \
+			-var="wait_for_certificate_validation=true" \
+			-auto-approve; \
 		$(MAKE) deployment-complete; \
 	else \
-		if [ "$(SERVE_WEB_CLIENT)" = "yes" ] && [ -n "$(WEB_CLIENT_S3_ENDPOINT)" ]; then \
-			AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
-				-var="region=$(REGION)" \
-				-var="root_domain_name=$(ROOT_DOMAIN)" \
-				-var="sam_http_api_id=$$HTTP_API_ID" \
-				-var="web_client_s3_endpoint=$(WEB_CLIENT_S3_ENDPOINT)" \
-				-auto-approve; \
-		else \
-			AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
-				-var="region=$(REGION)" \
-				-var="root_domain_name=$(ROOT_DOMAIN)" \
-				-var="sam_http_api_id=$$HTTP_API_ID" \
-				-auto-approve; \
-		fi; \
+		AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
+			-var="region=$(REGION)" \
+			-var="root_domain_name=$(ROOT_DOMAIN)" \
+			-var="sam_http_api_id=$$HTTP_API_ID" \
+			-auto-approve; \
 		$(MAKE) deployment-stage1-complete; \
 	fi
 
@@ -404,98 +386,30 @@ generate-outputs:
 	echo "#   cd infrastructure && terraform output cloudfront_distribution_id" >> $(TF_DIR)/variableoutputs.txt
 	@echo "Outputs written to $(TF_DIR)/variableoutputs.txt"
 
-.PHONY: update-s3-endpoint
-update-s3-endpoint:
-	@# Update S3 endpoint in config.mk (can be called after web client deployment)
-	@if [ -z "$(ENDPOINT)" ]; then \
-	  echo ""; \
-	  echo "Enter the S3 website endpoint (e.g., web-client-bucket.s3-website.eu-west-2.amazonaws.com):"; \
-	  read -r s3_endpoint; \
-	else \
-	  s3_endpoint="$(ENDPOINT)"; \
+.PHONY: deploy-frontend
+deploy-frontend:
+	@# Deploy frontend files to S3 bucket
+	@if ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_s3_bucket.web_client'; then \
+	  echo "S3 bucket not found. Skipping frontend deployment. Run 'make deploy' again after infrastructure is created."; \
+	  exit 0; \
 	fi; \
-	if [ -z "$$s3_endpoint" ]; then \
-	  echo "ERROR: S3 endpoint cannot be empty"; \
-	  exit 1; \
+	S3_BUCKET=$$(cd $(TF_DIR) && terraform output -raw s3_bucket_name 2>/dev/null); \
+	if [ -z "$$S3_BUCKET" ]; then \
+	  echo "S3 bucket name not found. Skipping frontend deployment."; \
+	  exit 0; \
 	fi; \
-	if [ ! -f config.mk ]; then \
-	  echo "ERROR: config.mk not found. Run 'make deploy' first."; \
-	  exit 1; \
-	fi; \
-	if ! grep -q "^SERVE_WEB_CLIENT" config.mk || ! grep -q "^SERVE_WEB_CLIENT.*yes" config.mk; then \
-	  echo "Setting SERVE_WEB_CLIENT = yes"; \
-	  if grep -q "^SERVE_WEB_CLIENT" config.mk; then \
-	    sed -i.bak "s|^SERVE_WEB_CLIENT.*|SERVE_WEB_CLIENT = yes|" config.mk; \
-	  else \
-	    echo "SERVE_WEB_CLIENT = yes" >> config.mk; \
-	  fi; \
-	fi; \
-	if grep -q "^WEB_CLIENT_S3_ENDPOINT" config.mk; then \
-	  sed -i.bak "s|^WEB_CLIENT_S3_ENDPOINT.*|WEB_CLIENT_S3_ENDPOINT = $$s3_endpoint|" config.mk; \
-	  echo "Updated WEB_CLIENT_S3_ENDPOINT in config.mk"; \
-	else \
-	  echo "WEB_CLIENT_S3_ENDPOINT = $$s3_endpoint" >> config.mk; \
-	  echo "Added WEB_CLIENT_S3_ENDPOINT to config.mk"; \
-	fi; \
-	rm -f config.mk.bak; \
-	echo "Configuration updated. Run 'make deploy' to integrate the S3 endpoint."
+	echo "Deploying frontend to S3 bucket: $$S3_BUCKET"; \
+	AWS_REGION=$(REGION) aws s3 sync frontend/ s3://$$S3_BUCKET/ \
+	  --delete \
+	  --exclude "*.git*" \
+	  --exclude "*.DS_Store" \
+	  --cache-control "public, max-age=3600"; \
+	echo "Frontend deployed successfully."
 
 .PHONY: ensure-config
 ensure-config:
 	@if [ -z "$(REGION)" ] || [ -z "$(ROOT_DOMAIN)" ]; then \
-	  echo "ERROR: Set AWS_REGION and ROOT_DOMAIN in config.mk"; exit 1; \
-	fi
-	@# Interactive prompt for web client integration
-	@if [ -z "$(SERVE_WEB_CLIENT)" ]; then \
-	  echo ""; \
-	  echo "Do you want to serve the web client from this CloudFront? (y/n)"; \
-	  read -r answer; \
-	  if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
-	    echo "Enter the S3 website endpoint (e.g., web-client-bucket.s3-website.eu-west-2.amazonaws.com):"; \
-	    echo "(Press Enter to skip for now - you can add it later after deploying the web client)"; \
-	    read -r s3_endpoint; \
-	    if [ -f config.mk ]; then \
-	      if grep -q "^SERVE_WEB_CLIENT" config.mk; then \
-	        sed -i.bak "s|^SERVE_WEB_CLIENT.*|SERVE_WEB_CLIENT = yes|" config.mk; \
-	      else \
-	        echo "SERVE_WEB_CLIENT = yes" >> config.mk; \
-	      fi; \
-	      if [ -n "$$s3_endpoint" ]; then \
-	        if grep -q "^WEB_CLIENT_S3_ENDPOINT" config.mk; then \
-	          sed -i.bak "s|^WEB_CLIENT_S3_ENDPOINT.*|WEB_CLIENT_S3_ENDPOINT = $$s3_endpoint|" config.mk; \
-	        else \
-	          echo "WEB_CLIENT_S3_ENDPOINT = $$s3_endpoint" >> config.mk; \
-	        fi; \
-	      else \
-	        if grep -q "^WEB_CLIENT_S3_ENDPOINT" config.mk; then \
-	          sed -i.bak "/^WEB_CLIENT_S3_ENDPOINT/d" config.mk; \
-	        fi; \
-	        echo "Note: S3 endpoint not set. Deploy server first, then web client, then update config.mk with the S3 endpoint and redeploy."; \
-	      fi; \
-	      rm -f config.mk.bak; \
-	    else \
-	      echo "SERVE_WEB_CLIENT = yes" > config.mk; \
-	      if [ -n "$$s3_endpoint" ]; then \
-	        echo "WEB_CLIENT_S3_ENDPOINT = $$s3_endpoint" >> config.mk; \
-	      fi; \
-	    fi; \
-	    echo "Configuration saved to config.mk"; \
-	  else \
-	    if [ -f config.mk ]; then \
-	      if grep -q "^SERVE_WEB_CLIENT" config.mk; then \
-	        sed -i.bak "s|^SERVE_WEB_CLIENT.*|SERVE_WEB_CLIENT = no|" config.mk; \
-	      else \
-	        echo "SERVE_WEB_CLIENT = no" >> config.mk; \
-	      fi; \
-	      if grep -q "^WEB_CLIENT_S3_ENDPOINT" config.mk; then \
-	        sed -i.bak "/^WEB_CLIENT_S3_ENDPOINT/d" config.mk; \
-	      fi; \
-	      rm -f config.mk.bak; \
-	    else \
-	      echo "SERVE_WEB_CLIENT = no" > config.mk; \
-	    fi; \
-	  fi; \
-	  echo ""; \
+	  echo "ERROR: Set REGION and ROOT_DOMAIN in config.mk"; exit 1; \
 	fi
 
 lint:

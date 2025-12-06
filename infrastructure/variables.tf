@@ -19,12 +19,6 @@ variable "wait_for_certificate_validation" {
   default     = false
 }
 
-variable "web_client_s3_endpoint" {
-  type        = string
-  description = "S3 website endpoint for web client (e.g., bucket.s3-website.region.amazonaws.com). If set, CloudFront will serve the web client from S3."
-  default     = ""
-}
-
 variable "allowed_origins" {
   type        = string
   description = "Comma-separated list of allowed CORS origins (e.g., https://example.com,https://app.example.com)"

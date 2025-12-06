@@ -70,3 +70,13 @@ output "cert_validation_records" {
     }, {})
   }
 }
+
+output "s3_bucket_name" {
+  description = "S3 bucket name for web client"
+  value       = aws_s3_bucket.web_client.id
+}
+
+output "s3_website_endpoint" {
+  description = "S3 website endpoint for web client"
+  value       = aws_s3_bucket_website_configuration.web_client.website_endpoint
+}

@@ -48,7 +48,7 @@ Globals:
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
 Resources:
   # HTTP API (no API Gateway authorizer; handlers enforce Basic/Bearer)
-    LambdaHttpApi:
+  LambdaHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
       DefaultRouteSettings:

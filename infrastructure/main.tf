@@ -19,6 +19,7 @@ provider "aws" {
 locals {
   api_subdomain = "api"
   fqdn      = "${local.api_subdomain}.${var.root_domain_name}"
+  s3_bucket_name = "${replace(var.root_domain_name, ".", "-")}-web-client"
 }
 
 ########################
@@ -72,81 +73,85 @@ resource "aws_apigatewayv2_api_mapping" "api" {
 }
 
 ########################
+# S3 Bucket for Web Client
+########################
+
+resource "aws_s3_bucket" "web_client" {
+  bucket = local.s3_bucket_name
+}
+
+resource "aws_s3_bucket_website_configuration" "web_client" {
+  bucket = aws_s3_bucket.web_client.id
+
+  index_document {
+    suffix = "index.html"
+  }
+
+  error_document {
+    key = "index.html"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "web_client" {
+  bucket = aws_s3_bucket.web_client.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_policy" "web_client" {
+  bucket = aws_s3_bucket.web_client.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadGetObject"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.web_client.arn}/*"
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.web_client]
+}
+
+########################
 # CloudFront Distribution (domain.com - optional web client)
 ########################
 
-# CloudFront function for handling requests when S3 web client is disabled
-resource "aws_cloudfront_function" "web_client_fallback" {
-  name    = "${replace(var.root_domain_name, ".", "-")}-web-client-fallback"
-  runtime = "cloudfront-js-1.0"
-  publish = true
-  comment = "Returns 404 when web client S3 endpoint is not configured"
-  code    = <<-EOT
-    function handler(event) {
-      return {
-        statusCode: 404,
-        statusDescription: 'Not Found',
-        body: 'Not Found'
-      };
-    }
-  EOT
-}
 
-# CloudFront distribution for root domain (serves web client from S3 when configured)
+# CloudFront distribution for root domain (serves web client from S3)
 resource "aws_cloudfront_distribution" "web_client" {
   count           = var.wait_for_certificate_validation ? 1 : 0
   enabled         = true
   aliases         = [var.root_domain_name]
-  comment         = var.web_client_s3_endpoint != "" ? "Web client distribution" : "Web client distribution (S3 not configured)"
+  comment         = "Web client distribution"
   price_class     = "PriceClass_100"
   is_ipv6_enabled = true
 
-  # S3 origin for web client (only if web_client_s3_endpoint is set)
-  dynamic "origin" {
-    for_each = var.web_client_s3_endpoint != "" ? [1] : []
-    content {
-      domain_name = var.web_client_s3_endpoint
-      origin_id   = "s3-web-client"
-      custom_origin_config {
-        http_port              = 80
-        https_port             = 443
-        origin_protocol_policy = "http-only"
-        origin_ssl_protocols   = ["TLSv1.2"]
-      }
-    }
-  }
-
-  # Dummy origin (only used when S3 is disabled - CloudFront function handles everything)
-  dynamic "origin" {
-    for_each = var.web_client_s3_endpoint == "" ? [1] : []
-    content {
-      domain_name = "unused.example.com"
-      origin_id   = "unused"
-      custom_origin_config {
-        http_port              = 80
-        https_port             = 443
-        origin_protocol_policy = "https-only"
-        origin_ssl_protocols   = ["TLSv1.2"]
-      }
+  # S3 website endpoint origin
+  origin {
+    domain_name = aws_s3_bucket_website_configuration.web_client.website_endpoint
+    origin_id   = "s3-web-client"
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
 
   # Default cache behavior
-  # Routes to S3 when enabled, otherwise uses CloudFront function to return 404
   default_cache_behavior {
-    target_origin_id       = var.web_client_s3_endpoint != "" ? "s3-web-client" : "unused"
+    target_origin_id       = "s3-web-client"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
-
-    # CloudFront function only used when S3 is disabled
-    dynamic "function_association" {
-      for_each = var.web_client_s3_endpoint == "" ? [1] : []
-      content {
-        event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.web_client_fallback.arn
-      }
-    }
 
     # Forwarded values (required for CloudFront cache behaviors)
     forwarded_values {
@@ -159,18 +164,22 @@ resource "aws_cloudfront_distribution" "web_client" {
     min_ttl     = 0
     default_ttl = 3600
     max_ttl     = 86400
-    compress    = var.web_client_s3_endpoint != "" ? true : false
+    compress    = true
   }
 
-  # Custom error responses for SPA routing (only when S3 is enabled)
-  dynamic "custom_error_response" {
-    for_each = var.web_client_s3_endpoint != "" ? [403, 404] : []
-    content {
-      error_caching_min_ttl = 300
-      error_code            = custom_error_response.value
-      response_code         = 200
-      response_page_path    = "/index.html"
-    }
+  # Custom error responses for SPA routing
+  custom_error_response {
+    error_caching_min_ttl = 300
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+  }
+
+  custom_error_response {
+    error_caching_min_ttl = 300
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
   }
 
   restrictions {
