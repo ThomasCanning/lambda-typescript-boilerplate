@@ -1,6 +1,5 @@
 import { APIGatewayProxyEventV2 } from "aws-lambda"
 import { StatusCodes } from "http-status-codes"
-import { selectLanguage } from "../jmap/language"
 import { BasicAuthResult } from "./types"
 import { createProblemDetails, errorTypes } from "../errors"
 
