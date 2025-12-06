@@ -1,6 +1,6 @@
 {
-  "name": "jmap-server",
-  "description": "Serverless JMAP email server built with AWS",
+  "name": "lambda-typescript-boilerplate",
+  "description": "Serverless TypeScript Lambda API built with AWS",
   "version": "0.0.1",
   "private": true,
   "engines": {

@@ -5,7 +5,7 @@ variable "region" {
 
 variable "root_domain_name" {
   type        = string
-  description = "Root domain (e.g., jmapbox.com)"
+  description = "Root domain (e.g., example.com)"
 }
 
 variable "sam_http_api_id" {
@@ -27,6 +27,6 @@ variable "web_client_s3_endpoint" {
 
 variable "allowed_origins" {
   type        = string
-  description = "Comma-separated list of allowed CORS origins (e.g., https://jmap.io,https://jmapbox.com)"
+  description = "Comma-separated list of allowed CORS origins (e.g., https://example.com,https://app.example.com)"
   default     = ""
 }

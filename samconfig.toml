@@ -3,7 +3,7 @@
 version = 0.1
 
 [default.global.parameters]
-stack_name = "jmap-server"
+stack_name = "lambda-typescript-boilerplate"
 
 [default.build.parameters]
 cached = true
@@ -16,7 +16,7 @@ lint = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
-s3_prefix = "jmap-server"
+s3_prefix = "lambda-typescript-boilerplate"
 image_repositories = []
 
 [default.package.parameters]

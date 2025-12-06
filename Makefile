@@ -1,4 +1,4 @@
-# JMAP Server Makefile
+# TypeScript Lambda API Makefile
 #
 # User-facing targets:
 #   - deploy           : Deploy to AWS (run twice: once to create certs, once to complete)
@@ -38,7 +38,7 @@ tf-apply:
 	CERTS_VALIDATED=false; \
 	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_acm_certificate.api'; then \
 		API_CERT_ARN=$$(cd $(TF_DIR) && terraform state show aws_acm_certificate.api 2>/dev/null | grep '^[[:space:]]*arn[[:space:]]*=' | head -1 | sed 's/.*= "\(.*\)"/\1/' || true); \
-		ROOT_CERT_ARN=$$(cd $(TF_DIR) && terraform state show aws_acm_certificate.root_autodiscovery 2>/dev/null | grep '^[[:space:]]*arn[[:space:]]*=' | head -1 | sed 's/.*= "\(.*\)"/\1/' || true); \
+		ROOT_CERT_ARN=$$(cd $(TF_DIR) && terraform state show aws_acm_certificate.root_web_client 2>/dev/null | grep '^[[:space:]]*arn[[:space:]]*=' | head -1 | sed 's/.*= "\(.*\)"/\1/' || true); \
 		if [ -n "$$API_CERT_ARN" ]; then \
 			API_STATUS=$$(AWS_REGION=$(REGION) aws acm describe-certificate --certificate-arn "$$API_CERT_ARN" --query 'Certificate.Status' --output text 2>/dev/null || echo "PENDING"); \
 		else \
@@ -63,7 +63,6 @@ tf-apply:
 				-var="root_domain_name=$(ROOT_DOMAIN)" \
 				-var="sam_http_api_id=$$HTTP_API_ID" \
 				-var="web_client_s3_endpoint=$(WEB_CLIENT_S3_ENDPOINT)" \
-				-var="allowed_origins=$(ALLOWED_ORIGINS)" \
 				-var="wait_for_certificate_validation=true" \
 				-auto-approve; \
 		else \
@@ -71,7 +70,6 @@ tf-apply:
 				-var="region=$(REGION)" \
 				-var="root_domain_name=$(ROOT_DOMAIN)" \
 				-var="sam_http_api_id=$$HTTP_API_ID" \
-				-var="allowed_origins=$(ALLOWED_ORIGINS)" \
 				-var="wait_for_certificate_validation=true" \
 				-auto-approve; \
 		fi; \
@@ -83,14 +81,12 @@ tf-apply:
 				-var="root_domain_name=$(ROOT_DOMAIN)" \
 				-var="sam_http_api_id=$$HTTP_API_ID" \
 				-var="web_client_s3_endpoint=$(WEB_CLIENT_S3_ENDPOINT)" \
-				-var="allowed_origins=$(ALLOWED_ORIGINS)" \
 				-auto-approve; \
 		else \
 			AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
 				-var="region=$(REGION)" \
 				-var="root_domain_name=$(ROOT_DOMAIN)" \
 				-var="sam_http_api_id=$$HTTP_API_ID" \
-				-var="allowed_origins=$(ALLOWED_ORIGINS)" \
 				-auto-approve; \
 		fi; \
 		$(MAKE) deployment-stage1-complete; \
@@ -108,7 +104,7 @@ deployment-stage1-complete:
 	if [ "$$ROOT_VALIDATION" != "$$API_VALIDATION" ]; then \
 		echo "CNAME	$$ROOT_VALIDATION	$$ROOT_VALUE	300" >> $(TF_DIR)/dns-records.txt; \
 	fi
-	@# Note: The validation record name already includes the subdomain (e.g., _hash.api.jmapbox.com)
+	@# Note: The validation record name already includes the subdomain (e.g., _hash.api.example.com)
 	@# so it will be correctly written to dns-records.txt
 	@$(MAKE) generate-outputs
 	@echo ""
@@ -120,24 +116,23 @@ deployment-stage1-complete:
 deployment-complete:
 	@# Generate DNS records file
 	@API_TARGET=$$(cd $(TF_DIR) && terraform output -raw api_gateway_target 2>/dev/null); \
-	CF_TARGET=$$(cd $(TF_DIR) && terraform output -raw cloudfront_autodiscovery_target 2>/dev/null); \
-	API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "jmap"); \
+	CF_TARGET=$$(cd $(TF_DIR) && terraform output -raw cloudfront_web_client_target 2>/dev/null); \
+	API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "api"); \
 	echo "Type	Name	Value	TTL" > $(TF_DIR)/dns-records.txt; \
 	echo "CNAME	$$API_SUBDOMAIN	$$API_TARGET	300" >> $(TF_DIR)/dns-records.txt; \
-	echo "ALIAS	@	$$CF_TARGET	300" >> $(TF_DIR)/dns-records.txt; \
-	echo "SRV	_jmap._tcp	0 1 443 $$API_SUBDOMAIN.$(ROOT_DOMAIN)	3600" >> $(TF_DIR)/dns-records.txt
+	echo "ALIAS	@	$$CF_TARGET	300" >> $(TF_DIR)/dns-records.txt
 	@$(MAKE) generate-outputs
 	@echo ""
 	@# Check if DNS is already configured correctly
-	@API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "jmap"); \
+	@API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "api"); \
 	EXPECTED_API_TARGET=$$(cd $(TF_DIR) && terraform output -raw api_gateway_target 2>/dev/null); \
 	PERM_DNS_OK=true; \
-	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_apigatewayv2_domain_name.jmap'; then \
+	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_apigatewayv2_domain_name.api'; then \
 		ACTUAL_API_TARGET=$$(dig +short $$API_SUBDOMAIN.$(ROOT_DOMAIN) CNAME | sed 's/\.$$//' || echo ""); \
 		if [ -z "$$ACTUAL_API_TARGET" ] || [ "$$ACTUAL_API_TARGET" != "$$EXPECTED_API_TARGET" ]; then \
 			PERM_DNS_OK=false; \
 		fi; \
-		EXPECTED_CF_TARGET=$$(cd $(TF_DIR) && terraform output -raw cloudfront_autodiscovery_target 2>/dev/null); \
+		EXPECTED_CF_TARGET=$$(cd $(TF_DIR) && terraform output -raw cloudfront_web_client_target 2>/dev/null); \
 		ROOT_CNAME=$$(dig +short $(ROOT_DOMAIN) CNAME | sed 's/\.$$//' || echo ""); \
 		if [ -n "$$ROOT_CNAME" ]; then \
 			if [ "$$ROOT_CNAME" != "$$EXPECTED_CF_TARGET" ]; then \
@@ -159,9 +154,6 @@ deployment-complete:
 					PERM_DNS_OK=false; \
 				fi; \
 			fi; \
-		fi; \
-		if ! dig +short SRV _jmap._tcp.$(ROOT_DOMAIN) | grep -q .; then \
-			PERM_DNS_OK=false; \
 		fi; \
 	fi; \
 	if [ "$$PERM_DNS_OK" = "true" ]; then \
@@ -201,7 +193,7 @@ validate-dns:
 	fi; \
 	echo ""; \
 	API_CERT_ARN=$$(cd $(TF_DIR) && terraform state show aws_acm_certificate.api 2>/dev/null | grep '^[[:space:]]*arn[[:space:]]*=' | head -1 | sed 's/.*= "\(.*\)"/\1/' || true); \
-	ROOT_CERT_ARN=$$(cd $(TF_DIR) && terraform state show aws_acm_certificate.root_autodiscovery 2>/dev/null | grep '^[[:space:]]*arn[[:space:]]*=' | head -1 | sed 's/.*= "\(.*\)"/\1/' || true); \
+	ROOT_CERT_ARN=$$(cd $(TF_DIR) && terraform state show aws_acm_certificate.root_web_client 2>/dev/null | grep '^[[:space:]]*arn[[:space:]]*=' | head -1 | sed 's/.*= "\(.*\)"/\1/' || true); \
 	API_CERT_OK=false; ROOT_CERT_OK=false; \
 	if [ -n "$$API_CERT_ARN" ]; then \
 		API_STATUS=$$(AWS_REGION=$(REGION) aws acm describe-certificate --certificate-arn "$$API_CERT_ARN" --query 'Certificate.Status' --output text 2>/dev/null || echo "UNKNOWN"); \
@@ -214,9 +206,9 @@ validate-dns:
 		if [ "$$ROOT_STATUS" = "ISSUED" ]; then ROOT_CERT_OK=true; fi; \
 	fi; \
 	echo ""; \
-	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_apigatewayv2_domain_name.jmap'; then \
+	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_apigatewayv2_domain_name.api'; then \
 		PERM_DNS_OK=true; \
-		API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "jmap"); \
+		API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "api"); \
 		EXPECTED_API_TARGET=$$(cd $(TF_DIR) && terraform output -raw api_gateway_target 2>/dev/null); \
 		ACTUAL_API_TARGET=$$(dig +short $$API_SUBDOMAIN.$(ROOT_DOMAIN) CNAME | sed 's/\.$$//' || echo ""); \
 		if [ -n "$$ACTUAL_API_TARGET" ]; then \
@@ -232,7 +224,7 @@ validate-dns:
 			echo "[MISSING] $$API_SUBDOMAIN.$(ROOT_DOMAIN)"; \
 			PERM_DNS_OK=false; \
 		fi; \
-		EXPECTED_CF_TARGET=$$(cd $(TF_DIR) && terraform output -raw cloudfront_autodiscovery_target 2>/dev/null); \
+		EXPECTED_CF_TARGET=$$(cd $(TF_DIR) && terraform output -raw cloudfront_web_client_target 2>/dev/null); \
 		ROOT_CNAME=$$(dig +short $(ROOT_DOMAIN) CNAME | sed 's/\.$$//' || echo ""); \
 		if [ -n "$$ROOT_CNAME" ]; then \
 			if [ "$$ROOT_CNAME" = "$$EXPECTED_CF_TARGET" ]; then \
@@ -266,12 +258,6 @@ validate-dns:
 				echo "[MISSING] $(ROOT_DOMAIN)"; \
 				PERM_DNS_OK=false; \
 			fi; \
-		fi; \
-		if dig +short SRV _jmap._tcp.$(ROOT_DOMAIN) | grep -q .; then \
-			echo "[OK] _jmap._tcp.$(ROOT_DOMAIN)"; \
-		else \
-			echo "[MISSING] _jmap._tcp.$(ROOT_DOMAIN)"; \
-			PERM_DNS_OK=false; \
 		fi; \
 		echo ""; \
 		if [ "$$PERM_DNS_OK" = "true" ]; then \
@@ -336,7 +322,7 @@ sam-deploy: validate-password
 		--parameter-overrides \
 			RootDomainName=$(ROOT_DOMAIN) \
 			AdminUsername=$(or $(ADMIN_USERNAME),admin) \
-			AllowedClientOrigins="$(ALLOWED_ORIGINS)"
+			AllowedClientOrigins="$(or $(ALLOWED_ORIGINS),http://localhost:5173)"
 
 set-admin-password: validate-password
 	@echo "Setting admin user password..."
@@ -395,17 +381,15 @@ generate-outputs:
 	@echo "# Infrastructure Outputs" > $(TF_DIR)/variableoutputs.txt; \
 	echo "# Generated: $$(date)" >> $(TF_DIR)/variableoutputs.txt; \
 	echo "" >> $(TF_DIR)/variableoutputs.txt; \
-	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_cloudfront_distribution.autodiscovery'; then \
+	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_cloudfront_distribution.web_client'; then \
 	  CF_ID=$$(cd $(TF_DIR) && terraform output -raw cloudfront_distribution_id 2>/dev/null); \
-	  CF_DOMAIN=$$(cd $(TF_DIR) && terraform output -raw cloudfront_autodiscovery_target 2>/dev/null); \
+	  CF_DOMAIN=$$(cd $(TF_DIR) && terraform output -raw cloudfront_web_client_target 2>/dev/null); \
 	  API_TARGET=$$(cd $(TF_DIR) && terraform output -raw api_gateway_target 2>/dev/null); \
 	  BASE_URL=$$(cd $(TF_DIR) && terraform output -raw base_url 2>/dev/null); \
-	  SESSION_ENDPOINT=$$(cd $(TF_DIR) && terraform output -raw jmap_session_endpoint 2>/dev/null); \
 	  echo "CloudFront Distribution ID: $$CF_ID" >> $(TF_DIR)/variableoutputs.txt; \
 	  echo "CloudFront Domain: $$CF_DOMAIN" >> $(TF_DIR)/variableoutputs.txt; \
 	  echo "API Gateway Target: $$API_TARGET" >> $(TF_DIR)/variableoutputs.txt; \
-	  echo "JMAP API URL: $$BASE_URL" >> $(TF_DIR)/variableoutputs.txt; \
-	  echo "JMAP Session Endpoint: $$SESSION_ENDPOINT" >> $(TF_DIR)/variableoutputs.txt; \
+	  echo "API Base URL: $$BASE_URL" >> $(TF_DIR)/variableoutputs.txt; \
 	  echo "" >> $(TF_DIR)/variableoutputs.txt; \
 	  echo "# For web client integration:" >> $(TF_DIR)/variableoutputs.txt; \
 	  echo "# Use CloudFront Distribution ID: $$CF_ID" >> $(TF_DIR)/variableoutputs.txt; \
@@ -425,7 +409,7 @@ update-s3-endpoint:
 	@# Update S3 endpoint in config.mk (can be called after web client deployment)
 	@if [ -z "$(ENDPOINT)" ]; then \
 	  echo ""; \
-	  echo "Enter the S3 website endpoint (e.g., jmap-web-jmapbox-com.s3-website.eu-west-2.amazonaws.com):"; \
+	  echo "Enter the S3 website endpoint (e.g., web-client-bucket.s3-website.eu-west-2.amazonaws.com):"; \
 	  read -r s3_endpoint; \
 	else \
 	  s3_endpoint="$(ENDPOINT)"; \
@@ -467,7 +451,7 @@ ensure-config:
 	  echo "Do you want to serve the web client from this CloudFront? (y/n)"; \
 	  read -r answer; \
 	  if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
-	    echo "Enter the S3 website endpoint (e.g., jmap-web-jmapbox-com.s3-website.eu-west-2.amazonaws.com):"; \
+	    echo "Enter the S3 website endpoint (e.g., web-client-bucket.s3-website.eu-west-2.amazonaws.com):"; \
 	    echo "(Press Enter to skip for now - you can add it later after deploying the web client)"; \
 	    read -r s3_endpoint; \
 	    if [ -f config.mk ]; then \
@@ -537,7 +521,7 @@ local: npm-install
 	  AWS_REGION=$(or $(REGION),eu-west-2) \
 	  sam build --region $(or $(REGION),eu-west-2) --use-container
 	@echo "Starting SAM CLI local API Gateway..."
-	@echo "JMAP server will be available at http://localhost:3001"
+	@echo "API server will be available at http://localhost:3001"
 	@echo "Press Ctrl+C to stop"
 	@echo ""
 	@env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
