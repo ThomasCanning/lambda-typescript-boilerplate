@@ -74,7 +74,6 @@ resource "aws_apigatewayv2_api_mapping" "api" {
 
 ########################
 # S3 Bucket for Web Client
-########################
 
 resource "aws_s3_bucket" "web_client" {
   bucket = local.s3_bucket_name
@@ -121,18 +120,17 @@ resource "aws_s3_bucket_policy" "web_client" {
 }
 
 ########################
-# CloudFront Distribution (domain.com - optional web client)
-########################
-
+# CloudFront Distribution
 
 # CloudFront distribution for root domain (serves web client from S3)
 resource "aws_cloudfront_distribution" "web_client" {
   count           = var.wait_for_certificate_validation ? 1 : 0
   enabled         = true
   aliases         = [var.root_domain_name]
-  comment         = "Web client distribution"
+  comment         = "Web client distribution for ${var.root_domain_name}"
   price_class     = "PriceClass_100"
   is_ipv6_enabled = true
+
 
   # S3 website endpoint origin
   origin {

@@ -15,7 +15,8 @@ export ADMIN_PASSWORD
 export VERTEX_AI_API_KEY
 export GOOGLE_VERTEX_PROJECT
 export GOOGLE_VERTEX_LOCATION
-export GOOGLE_APPLICATION_CREDENTIALS
+export GOOGLE_CREDENTIALS_JSON
+export APIFY_API_TOKEN
 
 TF_DIR      ?= infrastructure
 # Derive SAM stack name from samconfig.toml if not provided via env
@@ -31,7 +32,16 @@ gen-env-local:
 	USER_POOL_CLIENT_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' --output text 2>/dev/null || true); \
 	USER_POOL_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' --output text 2>/dev/null || true); \
 	REG=$(REGION); API_BASE="http://localhost:3001"; \
-	REGION="$$REG" USER_POOL_CLIENT_ID="$$USER_POOL_CLIENT_ID" USER_POOL_ID="$$USER_POOL_ID" API_BASE="$$API_BASE" node infrastructure/generate-env-local.js
+	REGION="$$REG" \
+	USER_POOL_CLIENT_ID="$$USER_POOL_CLIENT_ID" \
+	USER_POOL_ID="$$USER_POOL_ID" \
+	API_BASE="$$API_BASE" \
+	VERTEX_AI_API_KEY="$(VERTEX_AI_API_KEY)" \
+	GOOGLE_VERTEX_PROJECT="$(GOOGLE_VERTEX_PROJECT)" \
+	GOOGLE_VERTEX_LOCATION="$(GOOGLE_VERTEX_LOCATION)" \
+	GOOGLE_CREDENTIALS_JSON='$(GOOGLE_CREDENTIALS_JSON)' \
+	APIFY_API_TOKEN="$(APIFY_API_TOKEN)" \
+	node infrastructure/generate-env-local.js
 
 deploy: ensure-config npm-install lint test sam-deploy set-admin-password tf-apply deploy-frontend
 
@@ -304,6 +314,8 @@ npm-install:
 
 sam-deploy: validate-password
 	AWS_REGION=$(REGION) sam build
+	@# Base64 encode GOOGLE_CREDENTIALS_JSON to avoid CloudFormation parameter truncation issues
+	@GOOGLE_CREDS_ENCODED=$$(echo -n '$(GOOGLE_CREDENTIALS_JSON)' | base64 | tr -d '\n'); \
 	AWS_REGION=$(REGION) sam deploy --no-confirm-changeset --region $(REGION) \
 		--parameter-overrides \
 			RootDomainName=$(ROOT_DOMAIN) \
@@ -312,7 +324,8 @@ sam-deploy: validate-password
 			VertexAiApiKey=$(VERTEX_AI_API_KEY) \
 			GoogleVertexProject=$(GOOGLE_VERTEX_PROJECT) \
 			GoogleVertexLocation=$(or $(GOOGLE_VERTEX_LOCATION),us-central1) \
-			GoogleApplicationCredentials=$(or $(GOOGLE_APPLICATION_CREDENTIALS),./google-credentials.json)
+			GoogleCredentialsJson="$$GOOGLE_CREDS_ENCODED" \
+			ApifyApiToken=$(APIFY_API_TOKEN)
 
 set-admin-password: validate-password
 	@echo "Setting admin user password..."
@@ -396,6 +409,8 @@ generate-outputs:
 
 .PHONY: deploy-frontend
 deploy-frontend:
+	@echo "Building frontend..."
+	@cd frontend && npm install && npm run build
 	@# Deploy frontend files to S3 bucket
 	@if ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_s3_bucket.web_client'; then \
 	  echo "S3 bucket not found. Skipping frontend deployment. Run 'make deploy' again after infrastructure is created."; \
@@ -407,7 +422,7 @@ deploy-frontend:
 	  exit 0; \
 	fi; \
 	echo "Deploying frontend to S3 bucket: $$S3_BUCKET"; \
-	AWS_REGION=$(REGION) aws s3 sync frontend/ s3://$$S3_BUCKET/ \
+	AWS_REGION=$(REGION) aws s3 sync frontend/dist/ s3://$$S3_BUCKET/ \
 	  --delete \
 	  --exclude "*.git*" \
 	  --exclude "*.DS_Store" \
@@ -441,7 +456,7 @@ local: npm-install
 	@echo "Building SAM application..."
 	@env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
 	  AWS_REGION=$(or $(REGION),eu-west-2) \
-	  sam build --region $(or $(REGION),eu-west-2) --use-container
+	  sam build --region $(or $(REGION),eu-west-2)
 	@echo "Starting SAM CLI local API Gateway..."
 	@echo "API server will be available at http://localhost:3001"
 	@echo "Press Ctrl+C to stop"

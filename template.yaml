@@ -40,10 +40,15 @@ Parameters:
     Type: String
     Description: "Google Vertex Location"
     Default: "us-central1"
-  GoogleApplicationCredentials:
+  GoogleCredentialsJson:
     Type: String
-    Description: "Path to Google Application Credentials file"
-    Default: "./google-credentials.json"
+    Description: "Google Service Account credentials JSON (for Lambda)"
+    NoEcho: true
+    Default: ""
+  ApifyApiToken:
+    Type: String
+    Description: "Apify API Token for LinkedIn scraping"
+    NoEcho: true
 
 # Globals section for shared function and API Gateway configuration
 Globals:
@@ -61,7 +66,8 @@ Globals:
         VERTEX_AI_API_KEY: !Ref VertexAiApiKey
         GOOGLE_VERTEX_PROJECT: !Ref GoogleVertexProject
         GOOGLE_VERTEX_LOCATION: !Ref GoogleVertexLocation
-        GOOGLE_APPLICATION_CREDENTIALS: !Ref GoogleApplicationCredentials
+        GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
+        APIFY_API_TOKEN: !Ref ApifyApiToken
 
 # Resources declares the AWS resources that you want to include in the stack
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
@@ -135,16 +141,16 @@ Resources:
         EntryPoints:
           - src/handlers/api/authed.ts
 
-  apiUnauthedFunction:
+  apiGenerateFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/api/unauthed.unauthedHandler
+      Handler: src/handlers/api/generate.generateHandler
       Events:
         Api:
           Type: HttpApi
           Properties:
             ApiId: !Ref LambdaHttpApi
-            Path: /api/unauthed
+            Path: /api/generate
             Method: POST
     Metadata:
       BuildMethod: esbuild
@@ -153,7 +159,7 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/api/unauthed.ts
+          - src/handlers/api/generate.ts
 
   # AUTH ENDPOINTS
 

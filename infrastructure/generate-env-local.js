@@ -15,7 +15,8 @@ const apiBase = process.env.API_BASE || 'http://localhost:3001';
 const vertexAiApiKey = process.env.VERTEX_AI_API_KEY || '';
 const googleVertexProject = process.env.GOOGLE_VERTEX_PROJECT || '';
 const googleVertexLocation = process.env.GOOGLE_VERTEX_LOCATION || 'us-central1';
-const googleApplicationCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS || './google-credentials.json';
+const googleCredentialsJson = process.env.GOOGLE_CREDENTIALS_JSON || '';
+const apifyApiToken = process.env.APIFY_API_TOKEN || '';
 
 // Read and parse template.yaml
 // Suppress warnings about CloudFormation intrinsic functions (!Ref, !Sub, etc.)
@@ -78,9 +79,14 @@ for (const [resourceName, resource] of Object.entries(template.Resources || {}))
       envVars.GOOGLE_VERTEX_LOCATION = googleVertexLocation;
     }
     
-    // Check for GOOGLE_APPLICATION_CREDENTIALS
-    if (functionEnvVars.GOOGLE_APPLICATION_CREDENTIALS !== undefined || globalEnvVars.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
-      envVars.GOOGLE_APPLICATION_CREDENTIALS = googleApplicationCredentials;
+    // Check for GOOGLE_CREDENTIALS_JSON
+    if (functionEnvVars.GOOGLE_CREDENTIALS_JSON !== undefined || globalEnvVars.GOOGLE_CREDENTIALS_JSON !== undefined) {
+      envVars.GOOGLE_CREDENTIALS_JSON = googleCredentialsJson;
+    }
+    
+    // Check for APIFY_API_TOKEN
+    if (functionEnvVars.APIFY_API_TOKEN !== undefined || globalEnvVars.APIFY_API_TOKEN !== undefined) {
+      envVars.APIFY_API_TOKEN = apifyApiToken;
     }
     
     // Add AWS_REGION for local dev if likely needed (Cognito usage)
