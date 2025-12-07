@@ -1,3 +1,4 @@
+import fs from "fs"
 import { createVertex } from "@ai-sdk/google-vertex"
 
 let vertexInstance: ReturnType<typeof createVertex> | null = null
@@ -7,12 +8,12 @@ function getVertex() {
     return vertexInstance
   }
 
-  const credentialsJson = process.env.GOOGLE_CREDENTIALS_JSON
+  const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
   const project = process.env.GOOGLE_VERTEX_PROJECT
   const location = process.env.GOOGLE_VERTEX_LOCATION
 
-  if (!credentialsJson) {
-    throw new Error("GOOGLE_CREDENTIALS_JSON environment variable is required")
+  if (!credentialsPath) {
+    throw new Error("GOOGLE_APPLICATION_CREDENTIALS environment variable is required")
   }
 
   if (!project) {
@@ -23,21 +24,17 @@ function getVertex() {
     throw new Error("GOOGLE_VERTEX_LOCATION environment variable is required")
   }
 
-  // Handle base64 encoded JSON (if stored that way to avoid CloudFormation parameter issues)
+  // Read credentials from file
   let credentials
   try {
-    // Try parsing as-is first
+    const credentialsJson = fs.readFileSync(credentialsPath, "utf8")
     credentials = JSON.parse(credentialsJson)
   } catch (error) {
-    // If that fails, try base64 decoding first
-    try {
-      const decoded = Buffer.from(credentialsJson, "base64").toString("utf-8")
-      credentials = JSON.parse(decoded)
-    } catch (base64Error) {
-      throw new Error(
-        `Failed to parse GOOGLE_CREDENTIALS_JSON: ${error instanceof Error ? error.message : "Unknown error"}. Also tried base64 decode: ${base64Error instanceof Error ? base64Error.message : "Unknown error"}`
-      )
-    }
+    throw new Error(
+      `Failed to read Google credentials from ${credentialsPath}: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    )
   }
 
   vertexInstance = createVertex({

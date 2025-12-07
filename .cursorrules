@@ -1,0 +1,8 @@
+rules:
+  - id: prefer-getter-agents
+    description: Use lazy getters for mastra agents/mastra instance (getScraperAgent/getDesignerAgent/getMastra) instead of importing agent singletons directly.
+  - id: prefer-problem-details
+    description: When adding API handlers, ensure errors are wrapped into problem-details responses (via createProblemDetails) and include CORS/JSON headers.
+  - id: avoid-require
+    description: Avoid require(); use ES module imports.
+

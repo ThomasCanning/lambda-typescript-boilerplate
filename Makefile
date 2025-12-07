@@ -314,8 +314,11 @@ npm-install:
 
 sam-deploy: validate-password
 	AWS_REGION=$(REGION) sam build
-	@# Base64 encode GOOGLE_CREDENTIALS_JSON to avoid CloudFormation parameter truncation issues
-	@GOOGLE_CREDS_ENCODED=$$(echo -n '$(GOOGLE_CREDENTIALS_JSON)' | base64 | tr -d '\n'); \
+	@# Copy Google credentials into build output for deploy (so GOOGLE_APPLICATION_CREDENTIALS can point to a real file)
+	@if [ -f "google-credentials.json" ]; then \
+	  mkdir -p .aws-sam/build/apiGenerateFunction; \
+	  cp google-credentials.json .aws-sam/build/apiGenerateFunction/google-credentials.json; \
+	fi
 	AWS_REGION=$(REGION) sam deploy --no-confirm-changeset --region $(REGION) \
 		--parameter-overrides \
 			RootDomainName=$(ROOT_DOMAIN) \
@@ -324,7 +327,6 @@ sam-deploy: validate-password
 			VertexAiApiKey=$(VERTEX_AI_API_KEY) \
 			GoogleVertexProject=$(GOOGLE_VERTEX_PROJECT) \
 			GoogleVertexLocation=$(or $(GOOGLE_VERTEX_LOCATION),us-central1) \
-			GoogleCredentialsJson="$$GOOGLE_CREDS_ENCODED" \
 			ApifyApiToken=$(APIFY_API_TOKEN)
 
 set-admin-password: validate-password
@@ -457,6 +459,11 @@ local: npm-install
 	@env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
 	  AWS_REGION=$(or $(REGION),eu-west-2) \
 	  sam build --region $(or $(REGION),eu-west-2)
+	@# Copy Google credentials into build output for local runs (so GOOGLE_APPLICATION_CREDENTIALS can point to a real file)
+	@if [ -f "google-credentials.json" ]; then \
+	  mkdir -p .aws-sam/build/apiGenerateFunction; \
+	  cp google-credentials.json .aws-sam/build/apiGenerateFunction/google-credentials.json; \
+	fi
 	@echo "Starting SAM CLI local API Gateway..."
 	@echo "API server will be available at http://localhost:3001"
 	@echo "Press Ctrl+C to stop"

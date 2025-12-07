@@ -2,9 +2,14 @@ import { Agent } from "@mastra/core/agent"
 import { vertex } from "../providers/vertex"
 import { linkedInProfileTool } from "../tools/linkedin-profile"
 
-export const scraperAgent = new Agent({
-  name: "scraper-agent",
-  instructions: `You are a specialized LinkedIn scraper. Your ONLY job is to use the linkedInProfileTool to fetch profile data.
+let scraperAgentInstance: Agent | null = null
+
+export function getScraperAgent() {
+  if (scraperAgentInstance) return scraperAgentInstance
+
+  scraperAgentInstance = new Agent({
+    name: "scraper-agent",
+    instructions: `You are a specialized LinkedIn scraper. Your ONLY job is to use the linkedInProfileTool to fetch profile data.
 
 CRITICAL INSTRUCTIONS:
 1. You MUST call the linkedInProfileTool. This tool does NOT require internet access - it works offline with mock data.
@@ -20,6 +25,9 @@ DO NOT:
 - Add any text before or after the JSON
 
 You MUST call the tool. It is available and ready to use.`,
-  model: vertex("gemini-2.0-flash"),
-  tools: { linkedInProfileTool },
-})
+    model: vertex("gemini-2.0-flash"),
+    tools: { linkedInProfileTool },
+  })
+
+  return scraperAgentInstance
+}

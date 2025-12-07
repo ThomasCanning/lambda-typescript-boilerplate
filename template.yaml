@@ -66,8 +66,8 @@ Globals:
         VERTEX_AI_API_KEY: !Ref VertexAiApiKey
         GOOGLE_VERTEX_PROJECT: !Ref GoogleVertexProject
         GOOGLE_VERTEX_LOCATION: !Ref GoogleVertexLocation
-        GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
         APIFY_API_TOKEN: !Ref ApifyApiToken
+        NODE_OPTIONS: "--enable-source-maps --openssl-legacy-provider"
 
 # Resources declares the AWS resources that you want to include in the stack
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
@@ -145,6 +145,9 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/api/generate.generateHandler
+      Environment:
+        Variables:
+          GOOGLE_APPLICATION_CREDENTIALS: "/var/task/google-credentials.json"
       Events:
         Api:
           Type: HttpApi

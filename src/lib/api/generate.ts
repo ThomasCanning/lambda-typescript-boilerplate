@@ -1,16 +1,4 @@
-// Lazy import to avoid module initialization errors
-import type { Mastra } from "@mastra/core/mastra"
-
-let mastraInstance: Mastra | null = null
-
-async function getMastra(): Promise<Mastra> {
-  if (!mastraInstance) {
-    // Import only when needed, so errors happen inside the handler's try-catch
-    const mastraModule = await import("../mastra")
-    mastraInstance = mastraModule.mastra
-  }
-  return mastraInstance
-}
+import { getMastra } from "../mastra"
 
 export interface GenerateRequest {
   prompt: string
@@ -24,7 +12,7 @@ export interface GenerateResponse {
 export async function generate(body: string): Promise<GenerateResponse> {
   const request: GenerateRequest = JSON.parse(body)
 
-  const mastra = await getMastra()
+  const mastra = getMastra()
   const workflow = mastra.getWorkflow("websiteBuilderWorkflow")
 
   if (!workflow) {

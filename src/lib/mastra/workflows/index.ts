@@ -1,7 +1,7 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows"
 import { z } from "zod"
-import { scraperAgent } from "../agents/scraper"
-import { designerAgent } from "../agents/designer"
+import { getScraperAgent } from "../agents/scraper"
+import { getDesignerAgent } from "../agents/designer"
 
 const scrapeStep = createStep({
   id: "scrape-step",
@@ -14,6 +14,7 @@ const scrapeStep = createStep({
   execute: async ({ inputData }) => {
     console.log("Scrape Step Input:", inputData)
     try {
+      const scraperAgent = getScraperAgent()
       const result = await scraperAgent.generate(`Scrape this LinkedIn profile: ${inputData.url}`)
       console.log("Scraper Agent Result Text:", result.text)
       console.log("Scraper Agent Tool Results:", JSON.stringify(result.toolResults, null, 2))
@@ -28,10 +29,12 @@ const scrapeStep = createStep({
         result.toolResults.length > 0
       ) {
         console.log("Agent output invalid/empty, checking tool results...")
-        // @ts-expect-error - toolResults structure may vary
-        const toolOutput = result.toolResults[0]?.output
-        if (toolOutput && toolOutput.profiles && toolOutput.profiles.length > 0) {
-          profileData = JSON.stringify(toolOutput.profiles[0])
+        const toolOutput = (
+          result as unknown as { toolResults?: Array<{ output?: { profiles?: Array<unknown> } }> }
+        ).toolResults?.[0]?.output
+        const profiles = (toolOutput as { profiles?: Array<unknown> } | undefined)?.profiles
+        if (profiles && profiles.length > 0) {
+          profileData = JSON.stringify(profiles[0])
           console.log("Used tool output directly.")
         }
       }
@@ -55,6 +58,7 @@ const designStep = createStep({
   execute: async ({ inputData }) => {
     console.log("Design Step Input Data Length:", inputData.profileData.length)
     try {
+      const designerAgent = getDesignerAgent()
       const result = await designerAgent.generate(inputData.profileData)
       console.log("Designer Agent Result Text Length:", result.text.length)
       return { html: result.text }
