@@ -56,7 +56,7 @@ Globals:
     Runtime: nodejs22.x
     Architectures:
       - arm64
-    Timeout: 30
+    Timeout: 180
     Environment:
       Variables:
         ALLOWED_ORIGINS: !Join [',', !Ref AllowedClientOrigins]
