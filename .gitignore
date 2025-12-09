@@ -24,5 +24,5 @@ dns-records.txt
 variableoutputs.txt
 
 # Google credentials
-google-credentials.jsondev.mk
+google-credentials.json
 frontend/.env.local
