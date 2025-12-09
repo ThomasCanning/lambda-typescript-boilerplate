@@ -324,7 +324,10 @@ validate-password:
 	fi
 
 npm-install:
+	@echo "Installing backend dependencies..."
 	@npm install --silent 2>&1 | grep -v "npm warn" | grep -v "husky" | grep -v "vulnerabilities" | grep -v "npm audit" | grep -v "npm fund" || true
+	@echo "Installing frontend dependencies..."
+	@cd frontend && npm install --silent 2>&1 | grep -v "npm warn" | grep -v "husky" | grep -v "vulnerabilities" | grep -v "npm audit" | grep -v "npm fund" || true
 
 sam-deploy: validate-password
 	AWS_REGION=$(REGION) sam build
