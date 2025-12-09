@@ -1,0 +1,5 @@
+# Copy this file to dev.mk and set your developer name
+
+# Your developer name (lowercase, no spaces)
+# This ensures you have your own isolated dev stack
+DEV_NAME = yourname

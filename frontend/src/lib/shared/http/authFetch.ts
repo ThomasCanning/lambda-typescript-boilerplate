@@ -2,7 +2,7 @@ export async function authFetch(path: string, options?: RequestInit): Promise<Re
   const defaultUrl = import.meta.env.DEV
     ? "http://localhost:3001"
     : "https://api.oneclickwebsite.ai"
-  const serverUrl = import.meta.env.VITE_SERVER_URL || defaultUrl
+  const serverUrl = import.meta.env.VITE_API_URL || defaultUrl
   const url = `${serverUrl}${path.startsWith("/") ? path : `/${path}`}`
 
   const headers = new Headers(options?.headers)

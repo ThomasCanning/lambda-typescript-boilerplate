@@ -27,11 +27,24 @@ function getVertex() {
   // Read credentials from file
   let credentials
   try {
-    const credentialsJson = fs.readFileSync(credentialsPath, "utf8")
-    credentials = JSON.parse(credentialsJson)
+    // Check if the credentials path is set
+    if (credentialsPath) {
+      if (!fs.existsSync(credentialsPath) && process.env.GOOGLE_CREDENTIALS_JSON) {
+        // If file doesn't exist but we have the JSON in env var, write it to /tmp
+        // This handles Lambda environments where we can't easily copy files to /var/task
+        const tmpPath = "/tmp/google-credentials.json"
+        fs.writeFileSync(tmpPath, process.env.GOOGLE_CREDENTIALS_JSON, "utf8")
+        // Update credentials path to use the tmp file
+        const credentialsJson = fs.readFileSync(tmpPath, "utf8")
+        credentials = JSON.parse(credentialsJson)
+      } else {
+        const credentialsJson = fs.readFileSync(credentialsPath, "utf8")
+        credentials = JSON.parse(credentialsJson)
+      }
+    }
   } catch (error) {
     throw new Error(
-      `Failed to read Google credentials from ${credentialsPath}: ${
+      `Failed to read Google credentials: ${
         error instanceof Error ? error.message : "Unknown error"
       }`
     )

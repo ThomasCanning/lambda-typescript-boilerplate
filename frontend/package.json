@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "VITE_SERVER_URL=http://localhost:3001 vite --port 5173",
+    "dev": "vite --port 5173",
     "build": "vite build && tsc",
     "serve": "vite preview",
     "test": "vitest run --passWithNoTests",

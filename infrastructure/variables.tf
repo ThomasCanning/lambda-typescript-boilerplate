@@ -11,6 +11,7 @@ variable "root_domain_name" {
 variable "sam_http_api_id" {
   type        = string
   description = "HTTP API ID from SAM outputs"
+  default     = ""  # Optional during bootstrap, set via Makefile during deployment
 }
 
 variable "wait_for_certificate_validation" {

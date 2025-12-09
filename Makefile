@@ -1,14 +1,14 @@
 # TypeScript Lambda API Makefile
 #
-# User-facing targets:
-#   - deploy           : Deploy to AWS (run twice: once to create certs, once to complete)
-#   - validate-dns     : Check DNS propagation and certificate validation status
-#   - local            : Run backend locally on http://localhost:3001
+# Top-level targets (what you run):
+#   - dev              : Deploy to personal dev stack (fast, no lint/test)
+#   - prod             : Deploy to production (with lint/test)
 #
-# Internal helper targets (used by deploy; you generally do not run directly):
+# Internal helper targets (used by dev/prod; you generally do not run directly):
 #   - tf-apply, sam-deploy, set-admin-password, ensure-config
 
 -include config.mk
+-include dev.mk
 -include .env
 export ADMIN_USERNAME
 export ADMIN_PASSWORD
@@ -19,110 +19,110 @@ export GOOGLE_CREDENTIALS_JSON
 export APIFY_API_TOKEN
 
 TF_DIR      ?= infrastructure
-# Stage: dev or prod (default: prod)
-STAGE       ?= prod
+# Stage: dev or prod (default: dev)
+STAGE       ?= dev
+LOWER_STAGE := $(shell echo $(STAGE) | tr '[:upper:]' '[:lower:]')
+
 # Derive SAM stack name from samconfig.toml if not provided via env, with stage suffix
-BASE_STACK_NAME  ?= $(shell awk -F'=' '/^stack_name/ {gsub(/[ \"\\r\\t]/, "", $$2); print $$2}' samconfig.toml)
-STACK_NAME  ?= $(BASE_STACK_NAME)-$(STAGE)
+# BASE_STACK_NAME is now defined in config.mk
+# For dev: append developer name to avoid conflicts
+ifeq ($(LOWER_STAGE),dev)
+  STACK_NAME  ?= $(BASE_STACK_NAME)-dev-$(DEV_NAME)
+else
+  STACK_NAME  ?= $(BASE_STACK_NAME)-$(LOWER_STAGE)
+endif
 GENERATION_TABLE ?= GenerationJobsTable
 GENERATION_QUEUE ?= GenerationQueue
 
-.PHONY: deploy tf-apply sam-deploy set-admin-password validate-password validate-dns
-.PHONY: deployment-stage1-complete deployment-complete generate-outputs
-.PHONY: local gen-env-local ensure-config update-s3-endpoint lint test npm-install
+.PHONY: tf-apply sam-deploy set-admin-password validate-password validate-dns
+.PHONY: deployment-complete generate-outputs
+.PHONY: npm-install ensure-config
 .PHONY: deploy-frontend dev prod
 
 # Shortcut targets for common workflows
+.DEFAULT_GOAL := help
+
+# dev: Deploy to dev stack using sam sync (fast, no lint/test, no password reset)
 dev:
-	@$(MAKE) deploy STAGE=dev
+	@if [ ! -f dev.mk ]; then \
+		echo "Error: dev.mk not found."; \
+		echo ""; \
+		echo "Create dev.mk with your developer name:"; \
+		echo "  cp dev.mk.example dev.mk"; \
+		echo "  # Edit dev.mk and set DEV_NAME to your name (e.g., 'john')"; \
+		exit 1; \
+	fi
+	@if [ -z "$(DEV_NAME)" ]; then \
+		echo "Error: DEV_NAME not set in dev.mk"; \
+		echo ""; \
+		echo "Edit dev.mk and set DEV_NAME to your name (e.g., 'john')"; \
+		exit 1; \
+	fi
+	@$(MAKE) _dev-deploy STAGE=dev
 
-prod:
-	@$(MAKE) deploy STAGE=prod
+# logs: Stream logs from all functions in the stack
+logs:
+	@echo "🔍 Streaming logs for stack: $(STACK_NAME)..."
+	@AWS_REGION=$(REGION) sam logs --stack-name $(STACK_NAME) --tail \
+		| grep --line-buffered -v "INIT_START" \
+		| grep --line-buffered -v "START RequestId" \
+		| grep --line-buffered -v "END RequestId" \
+		| grep --line-buffered -v "REPORT RequestId" \
+		| grep --line-buffered -v "Unable to load legacy provider" \
+		| grep --line-buffered -v "Access logging is disabled" || true
 
-gen-env-local:
-	@STACK_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].StackId' --output text 2>/dev/null || true); \
-	USER_POOL_CLIENT_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' --output text 2>/dev/null || true); \
-	USER_POOL_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' --output text 2>/dev/null || true); \
-	ACTUAL_TABLE_NAME=$$(AWS_REGION=$(REGION) aws cloudformation describe-stack-resources --stack-name $(STACK_NAME) --logical-resource-id GenerationJobsTable --query 'StackResources[0].PhysicalResourceId' --output text 2>/dev/null || echo "$(GENERATION_TABLE)"); \
-	ACTUAL_QUEUE_URL=$$(AWS_REGION=$(REGION) aws cloudformation describe-stack-resources --stack-name $(STACK_NAME) --logical-resource-id GenerationQueue --query 'StackResources[0].PhysicalResourceId' --output text 2>/dev/null || echo ""); \
-	REG=$(REGION); API_BASE="http://localhost:3001"; \
-	REGION="$$REG" \
-	USER_POOL_CLIENT_ID="$$USER_POOL_CLIENT_ID" \
-	USER_POOL_ID="$$USER_POOL_ID" \
-	API_BASE="$$API_BASE" \
-	VERTEX_AI_API_KEY="$(VERTEX_AI_API_KEY)" \
-	GOOGLE_VERTEX_PROJECT="$(GOOGLE_VERTEX_PROJECT)" \
-	GOOGLE_VERTEX_LOCATION="$(GOOGLE_VERTEX_LOCATION)" \
-	GOOGLE_CREDENTIALS_JSON='$(GOOGLE_CREDENTIALS_JSON)' \
-	APIFY_API_TOKEN="$(APIFY_API_TOKEN)" \
-	GENERATION_JOBS_TABLE="$$ACTUAL_TABLE_NAME" \
-	GENERATION_QUEUE_URL="$$ACTUAL_QUEUE_URL" \
-	node infrastructure/generate-env-local.js
+_dev-deploy:
+	@echo "   Stack: $(STACK_NAME)"
+	@$(MAKE) ensure-config npm-install
+	@echo ""
+	@# Check if stack exists
+	@if aws cloudformation describe-stacks --stack-name $(STACK_NAME) --region $(REGION) >/dev/null 2>&1; then \
+		$(MAKE) refresh-dev-env; \
+		echo "🚀 Syncing to dev stack (watch mode)..."; \
+		AWS_REGION=$(REGION) sam sync --watch --stack-name $(STACK_NAME) --region $(REGION); \
+	else \
+		echo "🚀 Creating dev stack (first deployment)..."; \
+		$(MAKE) sam-deploy; \
+		$(MAKE) refresh-dev-env; \
+	fi
+	@echo ""
+	@echo "✅ Dev stack ready!"
 
-deploy: ensure-config npm-install lint test sam-deploy set-admin-password tf-apply deploy-frontend
+refresh-dev-env:
+	@echo "🔄 Refreshing local environment..."
+	@API_ID=$$(AWS_REGION=$(or $(REGION),eu-west-2) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`HttpApiId`].OutputValue' --output text 2>/dev/null); \
+	if [ -z "$$API_ID" ] || [ "$$API_ID" = "None" ]; then \
+	  echo "❌ Error: Could not retrieve HttpApiId from CloudFormation stack '$(STACK_NAME)'"; \
+	  exit 1; \
+	fi; \
+	API_URL="https://$$API_ID.execute-api.$(or $(REGION),eu-west-2).amazonaws.com"; \
+	echo "VITE_API_URL=$$API_URL" > frontend/.env.local; \
+	echo "   API: $$API_URL"; \
+	echo ""; \
+	echo "Next steps:"; \
+	echo "  cd frontend && npm run dev"
 
+# tf-apply: Deploy Terraform infrastructure (ACM certs, CloudFront, S3)
 tf-apply:
-	@# Read SAM outputs to feed Terraform variables
+	@echo "🏗️  Deploying Terraform infrastructure..."
 	@HTTP_API_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks \
 		--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`HttpApiId`].OutputValue' --output text); \
-	AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) init -upgrade >/dev/null; \
-	CERTS_VALIDATED=false; \
-	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_acm_certificate.api'; then \
-		API_CERT_ARN=$$(cd $(TF_DIR) && terraform state show aws_acm_certificate.api 2>/dev/null | grep '^[[:space:]]*arn[[:space:]]*=' | head -1 | sed 's/.*= "\(.*\)"/\1/' || true); \
-		ROOT_CERT_ARN=$$(cd $(TF_DIR) && terraform state show aws_acm_certificate.root_web_client 2>/dev/null | grep '^[[:space:]]*arn[[:space:]]*=' | head -1 | sed 's/.*= "\(.*\)"/\1/' || true); \
-		if [ -n "$$API_CERT_ARN" ]; then \
-			API_STATUS=$$(AWS_REGION=$(REGION) aws acm describe-certificate --certificate-arn "$$API_CERT_ARN" --query 'Certificate.Status' --output text 2>/dev/null || echo "PENDING"); \
-		else \
-			API_STATUS="NOT_FOUND"; \
-		fi; \
-		if [ -n "$$ROOT_CERT_ARN" ]; then \
-			ROOT_STATUS=$$(AWS_REGION=us-east-1 aws acm describe-certificate --certificate-arn "$$ROOT_CERT_ARN" --query 'Certificate.Status' --output text 2>/dev/null || echo "PENDING"); \
-		else \
-			ROOT_STATUS="NOT_FOUND"; \
-		fi; \
-		if [ "$$API_STATUS" = "ISSUED" ] && [ "$$ROOT_STATUS" = "ISSUED" ]; then \
-			CERTS_VALIDATED=true; \
-			echo "Certificates validated. Completing infrastructure..."; \
-		else \
-			echo "Certificate status: API=$$API_STATUS Root=$$ROOT_STATUS"; \
-		fi; \
-	fi; \
-	if [ "$$CERTS_VALIDATED" = "true" ]; then \
-		AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
-			-var="region=$(REGION)" \
-			-var="root_domain_name=$(ROOT_DOMAIN)" \
-			-var="sam_http_api_id=$$HTTP_API_ID" \
-			-var="wait_for_certificate_validation=true" \
-			-auto-approve; \
-		$(MAKE) deployment-complete; \
-	else \
-		AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
-			-var="region=$(REGION)" \
-			-var="root_domain_name=$(ROOT_DOMAIN)" \
-			-var="sam_http_api_id=$$HTTP_API_ID" \
-			-auto-approve; \
-		$(MAKE) deployment-stage1-complete; \
-	fi
+	eval $$(aws configure export-credentials --profile default --format env) && \
+	AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) init -upgrade >/dev/null && \
+	AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
+		-var="region=$(REGION)" \
+		-var="root_domain_name=$(ROOT_DOMAIN)" \
+		-var="sam_http_api_id=$$HTTP_API_ID" \
+		-var="wait_for_certificate_validation=true" \
+		-auto-approve
+	@echo "✅ Terraform infrastructure deployed!"
 
-.PHONY: deployment-stage1-complete
-deployment-stage1-complete:
-	@# Generate DNS records file
-	@echo "Type	Name	Value	TTL" > $(TF_DIR)/dns-records.txt; \
-	API_VALIDATION=$$(cd $(TF_DIR) && terraform output -json cert_validation_records 2>/dev/null | grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$$//'); \
-	API_VALUE=$$(cd $(TF_DIR) && terraform output -json cert_validation_records 2>/dev/null | grep -o '"value"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$$//'); \
-	ROOT_VALIDATION=$$(cd $(TF_DIR) && terraform output -json cert_validation_records 2>/dev/null | grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' | tail -1 | cut -d'"' -f4 | sed 's/\.$$//'); \
-	ROOT_VALUE=$$(cd $(TF_DIR) && terraform output -json cert_validation_records 2>/dev/null | grep -o '"value"[[:space:]]*:[[:space:]]*"[^"]*"' | tail -1 | cut -d'"' -f4 | sed 's/\.$$//'); \
-	echo "CNAME	$$API_VALIDATION	$$API_VALUE	300" >> $(TF_DIR)/dns-records.txt; \
-	if [ "$$ROOT_VALIDATION" != "$$API_VALIDATION" ]; then \
-		echo "CNAME	$$ROOT_VALIDATION	$$ROOT_VALUE	300" >> $(TF_DIR)/dns-records.txt; \
-	fi
-	@# Note: The validation record name already includes the subdomain (e.g., _hash.api.example.com)
-	@# so it will be correctly written to dns-records.txt
-	@$(MAKE) generate-outputs
-	@echo ""
-	@echo "DNS setup required. Set the values in $(TF_DIR)/dns-records.txt at your DNS provider."
-	@echo "Wait for propagation (or check with: make validate-dns), then run: make deploy"
-	@echo ""
+# prod: Full production deployment (backend + Terraform + frontend)
+prod:
+	@echo "🚀 Deploying to production..."
+	@$(MAKE) ensure-config npm-install lint test sam-deploy set-admin-password tf-apply deploy-frontend STAGE=prod
+	@echo "✅ Production deployment complete!"
+
 
 .PHONY: deployment-complete
 deployment-complete:
@@ -179,7 +179,7 @@ deployment-complete:
 .PHONY: validate-dns
 validate-dns:
 	@if ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_acm_certificate.api'; then \
-		echo "Error: No certificates found. Run 'make deploy' first."; \
+		echo "Error: No certificates found. Run 'make prod' first."; \
 		exit 1; \
 	fi
 	@echo "Checking DNS and certificate status..."; \
@@ -281,7 +281,6 @@ validate-dns:
 	else \
 		if [ "$$API_CERT_OK" = "true" ] && [ "$$ROOT_CERT_OK" = "true" ]; then \
 			echo "STATUS: READY - Certificates validated"; \
-			echo "Action: Run 'make deploy' to complete infrastructure"; \
 		elif [ "$$API_DNS_OK" = "true" ] && [ "$$ROOT_DNS_OK" = "true" ]; then \
 			echo "STATUS: WAITING - DNS records found, waiting for certificate validation (5-15 minutes)"; \
 			echo "Action: Wait for AWS to validate certificates"; \
@@ -337,6 +336,7 @@ sam-deploy: validate-password
 	  cp google-credentials.json .aws-sam/build/apiGenerateWorkerFunction/google-credentials.json; \
 	fi
 	AWS_REGION=$(REGION) sam deploy --no-confirm-changeset --region $(REGION) \
+		--stack-name $(STACK_NAME) \
 		--parameter-overrides \
 			RootDomainName=$(ROOT_DOMAIN) \
 			AdminUsername=$(or $(ADMIN_USERNAME),admin) \
@@ -418,7 +418,7 @@ generate-outputs:
 	  echo "# This is needed when deploying the web client in shared mode" >> $(TF_DIR)/variableoutputs.txt; \
 	else \
 	  echo "CloudFront Distribution ID: Not yet deployed" >> $(TF_DIR)/variableoutputs.txt; \
-	  echo "# Run 'make deploy' to create the CloudFront distribution" >> $(TF_DIR)/variableoutputs.txt; \
+	  echo "# Run 'make prod' to create the CloudFront distribution" >> $(TF_DIR)/variableoutputs.txt; \
 	fi; \
 	echo "" >> $(TF_DIR)/variableoutputs.txt; \
 	echo "# To check outputs manually:" >> $(TF_DIR)/variableoutputs.txt; \
@@ -432,7 +432,7 @@ deploy-frontend:
 	@cd frontend && npm install && npm run build
 	@# Deploy frontend files to S3 bucket
 	@if ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_s3_bucket.web_client'; then \
-	  echo "S3 bucket not found. Skipping frontend deployment. Run 'make deploy' again after infrastructure is created."; \
+	  echo "S3 bucket not found. Skipping frontend deployment. Run 'make prod' again after infrastructure is created."; \
 	  exit 0; \
 	fi; \
 	S3_BUCKET=$$(cd $(TF_DIR) && terraform output -raw s3_bucket_name 2>/dev/null); \
@@ -485,32 +485,3 @@ test:
 	@echo "Running tests..."
 	@npm test
 
-# Run backend (SAM) + Worker locally against dev stack
-# Usage: make local (uses dev stack by default)
-#        make local STAGE=prod (uses prod stack - not recommended)
-local: npm-install
-	@command -v sam >/dev/null || (echo "ERROR: AWS SAM CLI not found"; exit 1)
-	@command -v docker >/dev/null || (echo "ERROR: Docker not found"; exit 1)
-	@docker info >/dev/null 2>&1 || (echo "ERROR: Docker is not running"; exit 1)
-	@echo "🚀 Starting local development against $(STAGE) stack..."
-	@$(MAKE) gen-env-local STAGE=dev >/dev/null || true
-	@echo "📦 Building SAM..."
-	@mkdir -p .logs
-	@env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
-	  AWS_REGION=$(or $(REGION),eu-west-2) \
-	  sam build --region $(or $(REGION),eu-west-2) >/dev/null
-	@if [ -f "google-credentials.json" ]; then \
-	  mkdir -p .aws-sam/build/apiGenerateFunction; \
-	  cp google-credentials.json .aws-sam/build/apiGenerateFunction/google-credentials.json; \
-	  mkdir -p .aws-sam/build/apiGenerateWorkerFunction; \
-	  cp google-credentials.json .aws-sam/build/apiGenerateWorkerFunction/google-credentials.json; \
-	fi
-	@echo "🎯 Starting API..."
-	@echo "   API: http://localhost:3001"
-	@echo "   Stack: $(STACK_NAME)"
-	@echo "   Press Ctrl+C to stop"
-	@echo ""
-	@env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
-	  AWS_REGION=$(or $(REGION),eu-west-2) AWS_EC2_METADATA_DISABLED=true \
-	  sam local start-api --region $(or $(REGION),eu-west-2) --host 127.0.0.1 --port 3001 \
-	  --env-vars env.json 2>&1 | grep -v "This is a development server" || true

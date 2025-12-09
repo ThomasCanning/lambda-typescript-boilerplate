@@ -38,6 +38,8 @@ function mapContextToProgress(context: any): Partial<GenerateProgressUpdate["par
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const partials: any = {}
 
+  if (!context) return partials
+
   if (context.profileData) partials.profileData = context.profileData
   if (context.draftHtml) partials.draftHtml = context.draftHtml
   if (context.colorOptions) partials.colorOptions = context.colorOptions

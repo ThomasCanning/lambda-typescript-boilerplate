@@ -1,3 +1,4 @@
 REGION = us-east-1
 ROOT_DOMAIN = example.com
 ALLOWED_ORIGINS = http://localhost:5173,https://example.com
+BASE_STACK_NAME = oneclickwebsite
