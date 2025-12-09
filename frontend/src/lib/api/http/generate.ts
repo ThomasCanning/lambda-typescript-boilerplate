@@ -5,13 +5,54 @@ export interface GenerateRequest {
   prompt: string
 }
 
-export interface GenerateResponse {
+export type GenerateJobStatus =
+  | "pending"
+  | "running"
+  | "awaiting_choices"
+  | "awaiting_style"
+  | "succeeded"
+  | "failed"
+
+export interface GenerateStartResponse {
+  jobId: string
+  status: GenerateJobStatus
+}
+
+export interface GenerateResult {
   text: string
   toolResults?: unknown[]
 }
 
-export async function postGenerate(request: GenerateRequest): Promise<GenerateResponse> {
-  const response = await authFetch("/api/generate", {
+export interface GenerateStatusResponse {
+  jobId: string
+  status: GenerateJobStatus
+  currentStep?: string
+  progressMessage?: string
+  updatedAt?: string
+  result?: GenerateResult
+  error?: string
+  partials?: {
+    profileData?: unknown
+    draftHtml?: string
+    colorOptions?: unknown
+    copyOptions?: unknown
+    styleOptions?: unknown
+    finalHtml?: string
+    choices?: {
+      selectedPaletteId?: string
+      selectedCopyId?: string
+      selectedStyleId?: string
+    }
+  }
+  choices?: {
+    selectedPaletteId?: string
+    selectedCopyId?: string
+    selectedStyleId?: string
+  }
+}
+
+export async function postGenerateStart(request: GenerateRequest): Promise<GenerateStartResponse> {
+  const response = await authFetch("/api/generate/start", {
     method: "POST",
     body: JSON.stringify(request),
   })
@@ -21,5 +62,39 @@ export async function postGenerate(request: GenerateRequest): Promise<GenerateRe
     throw new Error(errorMessage)
   }
 
-  return response.json() as Promise<GenerateResponse>
+  return response.json() as Promise<GenerateStartResponse>
+}
+
+export async function getGenerateStatus(jobId: string): Promise<GenerateStatusResponse> {
+  const response = await authFetch(`/api/generate/status/${jobId}`, {
+    method: "GET",
+  })
+
+  if (!response.ok) {
+    const errorMessage = await parseHttpError(response)
+    throw new Error(errorMessage)
+  }
+
+  return response.json() as Promise<GenerateStatusResponse>
+}
+
+export async function postGenerateChoices(
+  jobId: string,
+  payload: {
+    selectedPaletteId?: string
+    selectedCopyId?: string
+    selectedStyleId?: string
+  }
+): Promise<{ jobId: string; status: GenerateJobStatus }> {
+  const response = await authFetch(`/api/generate/choices/${jobId}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const errorMessage = await parseHttpError(response)
+    throw new Error(errorMessage)
+  }
+
+  return response.json() as Promise<{ jobId: string; status: GenerateJobStatus }>
 }

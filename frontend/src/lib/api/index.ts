@@ -1,2 +1,8 @@
 export { useGenerate } from "./hooks/use-generate"
-export type { GenerateRequest, GenerateResponse } from "./http/generate"
+export type {
+  GenerateRequest,
+  GenerateStartResponse,
+  GenerateStatusResponse,
+  GenerateResult,
+  GenerateJobStatus,
+} from "./http/generate"

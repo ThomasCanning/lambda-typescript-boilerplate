@@ -17,6 +17,15 @@ const googleVertexProject = process.env.GOOGLE_VERTEX_PROJECT || '';
 const googleVertexLocation = process.env.GOOGLE_VERTEX_LOCATION || 'us-central1';
 const googleCredentialsJson = process.env.GOOGLE_CREDENTIALS_JSON || '';
 const apifyApiToken = process.env.APIFY_API_TOKEN || '';
+const generationJobsTable = process.env.GENERATION_JOBS_TABLE || 'GenerationJobsTable';
+// Use production queue URL if provided, otherwise default to local
+const generationQueueUrl = process.env.GENERATION_QUEUE_URL || 'http://host.docker.internal:9324/000000000000/GenerationQueue';
+// If using prod queue (URL starts with https://), don't set SQS_ENDPOINT
+const isProdQueue = generationQueueUrl.startsWith('https://');
+const sqsEndpoint = isProdQueue ? '' : (process.env.SQS_ENDPOINT || 'http://host.docker.internal:9324');
+// Use real AWS credentials if available, otherwise rely on credential chain
+const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID || '';
+const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || '';
 
 // Read and parse template.yaml
 // Suppress warnings about CloudFormation intrinsic functions (!Ref, !Sub, etc.)
@@ -89,11 +98,38 @@ for (const [resourceName, resource] of Object.entries(template.Resources || {}))
       envVars.APIFY_API_TOKEN = apifyApiToken;
     }
     
-    // Add AWS_REGION for local dev if likely needed (Cognito usage)
-    if (envVars.USER_POOL_CLIENT_ID || envVars.USER_POOL_ID) {
+    // Check for GENERATION_JOBS_TABLE
+    if (functionEnvVars.GENERATION_JOBS_TABLE !== undefined || globalEnvVars.GENERATION_JOBS_TABLE !== undefined) {
+      envVars.GENERATION_JOBS_TABLE = generationJobsTable;
+    }
+
+    // Check for GENERATION_QUEUE_URL
+    if (functionEnvVars.GENERATION_QUEUE_URL !== undefined || globalEnvVars.GENERATION_QUEUE_URL !== undefined) {
+      envVars.GENERATION_QUEUE_URL = generationQueueUrl;
+    }
+
+    // DDB_ENDPOINT is not set - always use production DynamoDB (default AWS endpoint)
+
+    // Check for SQS_ENDPOINT (only set if using local SQS emulator)
+    // When using prod SQS, don't set SQS_ENDPOINT so it uses default AWS endpoint
+    if ((functionEnvVars.SQS_ENDPOINT !== undefined || globalEnvVars.SQS_ENDPOINT !== undefined) && !isProdQueue && sqsEndpoint) {
+      envVars.SQS_ENDPOINT = sqsEndpoint;
+    }
+
+    // Add AWS_REGION for local dev if likely needed (Cognito usage or DynamoDB)
+    if (envVars.USER_POOL_CLIENT_ID || envVars.USER_POOL_ID || envVars.GENERATION_JOBS_TABLE) {
       envVars.AWS_REGION = region;
     }
     
+    // Provide AWS credentials if explicitly set, otherwise rely on credential chain
+    // (AWS_PROFILE, IAM role, etc.)
+    if (awsAccessKeyId) {
+      envVars.AWS_ACCESS_KEY_ID = awsAccessKeyId;
+    }
+    if (awsSecretAccessKey) {
+      envVars.AWS_SECRET_ACCESS_KEY = awsSecretAccessKey;
+    }
+
     // Always add to env.json
     envJson[resourceName] = envVars;
   }
@@ -103,3 +139,6 @@ for (const [resourceName, resource] of Object.entries(template.Resources || {}))
 fs.writeFileSync(envJsonPath, JSON.stringify(envJson, null, 2) + '\n');
 console.log(`Wrote env.json (region=${region}, client_id=${userPoolClientId || '<unset>'}, pool_id=${userPoolId || '<unset>'})`);
 console.log(`Functions: ${Object.keys(envJson).join(', ')}`);
+if (!process.env.AWS_ACCESS_KEY_ID && !process.env.AWS_PROFILE) {
+  console.warn('WARNING: No AWS credentials found. Ensure AWS credentials are configured (aws configure, AWS_PROFILE, or IAM role).');
+}

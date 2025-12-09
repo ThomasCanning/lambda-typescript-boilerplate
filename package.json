@@ -10,6 +10,7 @@
     "@ai-sdk/google-vertex": "^3.0.86",
     "@aws-sdk/client-cognito-identity-provider": "^3.922.0",
     "@aws-sdk/client-dynamodb": "^3.398.0",
+    "@aws-sdk/client-sqs": "^3.922.0",
     "@aws-sdk/lib-dynamodb": "^3.398.0",
     "@mastra/core": "^0.24.6",
     "accept-language": "^3.0.20",
@@ -27,6 +28,7 @@
     "@types/jest": "^29.5.12",
     "@types/node": "^24.9.1",
     "aws-sdk-client-mock": "^2.0.0",
+    "concurrently": "^9.2.1",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
@@ -77,7 +79,7 @@
       "jsx"
     ],
     "transform": {
-      "^.+\\.(ts|tsx)$": [
+      "^.+\\.(ts|tsx|js|jsx|mjs|cjs)$": [
         "ts-jest",
         {
           "tsconfig": "tsconfig.json"
@@ -85,7 +87,7 @@
       ]
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!jose)"
+      "node_modules/(?!jose|@mastra/core|@sindresorhus|escape-string-regexp)"
     ],
     "moduleNameMapper": {
       "^jose$": "<rootDir>/__tests__/__mocks__/jose.ts"

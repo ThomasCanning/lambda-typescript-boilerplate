@@ -10,6 +10,7 @@ export const errorTypes = {
   internalServerError: "errors/internalServerError",
   unauthorized: "errors/unauthorized",
   badRequest: "errors/badRequest",
+  notFound: "errors/notFound",
 } as const
 
 export function createProblemDetails(options: ProblemDetails): ProblemDetails {

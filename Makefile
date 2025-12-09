@@ -19,18 +19,32 @@ export GOOGLE_CREDENTIALS_JSON
 export APIFY_API_TOKEN
 
 TF_DIR      ?= infrastructure
-# Derive SAM stack name from samconfig.toml if not provided via env
-STACK_NAME  ?= $(shell awk -F'=' '/^stack_name/ {gsub(/[ "\r\t]/, "", $$2); print $$2}' samconfig.toml)
+# Stage: dev or prod (default: prod)
+STAGE       ?= prod
+# Derive SAM stack name from samconfig.toml if not provided via env, with stage suffix
+BASE_STACK_NAME  ?= $(shell awk -F'=' '/^stack_name/ {gsub(/[ \"\\r\\t]/, "", $$2); print $$2}' samconfig.toml)
+STACK_NAME  ?= $(BASE_STACK_NAME)-$(STAGE)
+GENERATION_TABLE ?= GenerationJobsTable
+GENERATION_QUEUE ?= GenerationQueue
 
 .PHONY: deploy tf-apply sam-deploy set-admin-password validate-password validate-dns
 .PHONY: deployment-stage1-complete deployment-complete generate-outputs
 .PHONY: local gen-env-local ensure-config update-s3-endpoint lint test npm-install
-.PHONY: deploy-frontend
+.PHONY: deploy-frontend dev prod
+
+# Shortcut targets for common workflows
+dev:
+	@$(MAKE) deploy STAGE=dev
+
+prod:
+	@$(MAKE) deploy STAGE=prod
 
 gen-env-local:
 	@STACK_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].StackId' --output text 2>/dev/null || true); \
 	USER_POOL_CLIENT_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' --output text 2>/dev/null || true); \
 	USER_POOL_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`UserPoolId`].OutputValue' --output text 2>/dev/null || true); \
+	ACTUAL_TABLE_NAME=$$(AWS_REGION=$(REGION) aws cloudformation describe-stack-resources --stack-name $(STACK_NAME) --logical-resource-id GenerationJobsTable --query 'StackResources[0].PhysicalResourceId' --output text 2>/dev/null || echo "$(GENERATION_TABLE)"); \
+	ACTUAL_QUEUE_URL=$$(AWS_REGION=$(REGION) aws cloudformation describe-stack-resources --stack-name $(STACK_NAME) --logical-resource-id GenerationQueue --query 'StackResources[0].PhysicalResourceId' --output text 2>/dev/null || echo ""); \
 	REG=$(REGION); API_BASE="http://localhost:3001"; \
 	REGION="$$REG" \
 	USER_POOL_CLIENT_ID="$$USER_POOL_CLIENT_ID" \
@@ -41,6 +55,8 @@ gen-env-local:
 	GOOGLE_VERTEX_LOCATION="$(GOOGLE_VERTEX_LOCATION)" \
 	GOOGLE_CREDENTIALS_JSON='$(GOOGLE_CREDENTIALS_JSON)' \
 	APIFY_API_TOKEN="$(APIFY_API_TOKEN)" \
+	GENERATION_JOBS_TABLE="$$ACTUAL_TABLE_NAME" \
+	GENERATION_QUEUE_URL="$$ACTUAL_QUEUE_URL" \
 	node infrastructure/generate-env-local.js
 
 deploy: ensure-config npm-install lint test sam-deploy set-admin-password tf-apply deploy-frontend
@@ -309,8 +325,7 @@ validate-password:
 	fi
 
 npm-install:
-	@echo "Installing dependencies..."
-	@npm install
+	@npm install --silent 2>&1 | grep -v "npm warn" | grep -v "husky" | grep -v "vulnerabilities" | grep -v "npm audit" | grep -v "npm fund" || true
 
 sam-deploy: validate-password
 	AWS_REGION=$(REGION) sam build
@@ -318,6 +333,8 @@ sam-deploy: validate-password
 	@if [ -f "google-credentials.json" ]; then \
 	  mkdir -p .aws-sam/build/apiGenerateFunction; \
 	  cp google-credentials.json .aws-sam/build/apiGenerateFunction/google-credentials.json; \
+	  mkdir -p .aws-sam/build/apiGenerateWorkerFunction; \
+	  cp google-credentials.json .aws-sam/build/apiGenerateWorkerFunction/google-credentials.json; \
 	fi
 	AWS_REGION=$(REGION) sam deploy --no-confirm-changeset --region $(REGION) \
 		--parameter-overrides \
@@ -429,6 +446,23 @@ deploy-frontend:
 	  --exclude "*.git*" \
 	  --exclude "*.DS_Store" \
 	  --cache-control "public, max-age=3600"; \
+	CF_DIST_ID=$$(cd $(TF_DIR) && terraform output -raw cloudfront_distribution_id 2>/dev/null); \
+	if [ -n "$$CF_DIST_ID" ]; then \
+	  echo "Invalidating CloudFront cache for distribution: $$CF_DIST_ID"; \
+	  INVALIDATION_ID=$$(AWS_REGION=$(REGION) aws cloudfront create-invalidation \
+	    --distribution-id $$CF_DIST_ID \
+	    --paths "/*" \
+	    --query 'Invalidation.Id' \
+	    --output text 2>/dev/null); \
+	  if [ -n "$$INVALIDATION_ID" ]; then \
+	    echo "CloudFront invalidation created: $$INVALIDATION_ID"; \
+	    echo "Cache will be cleared within a few minutes."; \
+	  else \
+	    echo "Warning: Failed to create CloudFront invalidation"; \
+	  fi; \
+	else \
+	  echo "Warning: CloudFront distribution ID not found. Skipping cache invalidation."; \
+	fi; \
 	echo "Frontend deployed successfully."
 
 .PHONY: ensure-config
@@ -443,33 +477,40 @@ lint:
 	@npx eslint --fix "**/*.{ts,tsx}"
 	@echo "Running TypeScript type-checks..."
 	@npx tsc --noEmit
+	@echo "Checking frontend TypeScript..."
+	@cd frontend && npx tsc --noEmit
 	@npx prettier --write "**/*.{ts,tsx,json,md}"
 
 test:
 	@echo "Running tests..."
 	@npm test
 
-# Run backend (SAM) locally
+# Run backend (SAM) + Worker locally against dev stack
+# Usage: make local (uses dev stack by default)
+#        make local STAGE=prod (uses prod stack - not recommended)
 local: npm-install
 	@command -v sam >/dev/null || (echo "ERROR: AWS SAM CLI not found"; exit 1)
+	@command -v docker >/dev/null || (echo "ERROR: Docker not found"; exit 1)
 	@docker info >/dev/null 2>&1 || (echo "ERROR: Docker is not running"; exit 1)
-	@$(MAKE) gen-env-local >/dev/null || true
+	@echo "🚀 Starting local development against $(STAGE) stack..."
+	@$(MAKE) gen-env-local STAGE=dev >/dev/null || true
+	@echo "📦 Building SAM..."
 	@mkdir -p .logs
-	@echo "Building SAM application..."
 	@env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
 	  AWS_REGION=$(or $(REGION),eu-west-2) \
-	  sam build --region $(or $(REGION),eu-west-2)
-	@# Copy Google credentials into build output for local runs (so GOOGLE_APPLICATION_CREDENTIALS can point to a real file)
+	  sam build --region $(or $(REGION),eu-west-2) >/dev/null
 	@if [ -f "google-credentials.json" ]; then \
 	  mkdir -p .aws-sam/build/apiGenerateFunction; \
 	  cp google-credentials.json .aws-sam/build/apiGenerateFunction/google-credentials.json; \
+	  mkdir -p .aws-sam/build/apiGenerateWorkerFunction; \
+	  cp google-credentials.json .aws-sam/build/apiGenerateWorkerFunction/google-credentials.json; \
 	fi
-	@echo "Starting SAM CLI local API Gateway..."
-	@echo "API server will be available at http://localhost:3001"
-	@echo "Press Ctrl+C to stop"
+	@echo "🎯 Starting API..."
+	@echo "   API: http://localhost:3001"
+	@echo "   Stack: $(STACK_NAME)"
+	@echo "   Press Ctrl+C to stop"
 	@echo ""
 	@env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
 	  AWS_REGION=$(or $(REGION),eu-west-2) AWS_EC2_METADATA_DISABLED=true \
 	  sam local start-api --region $(or $(REGION),eu-west-2) --host 127.0.0.1 --port 3001 \
 	  --env-vars env.json 2>&1 | grep -v "This is a development server" || true
-

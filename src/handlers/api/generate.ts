@@ -3,7 +3,12 @@ import { jsonResponseHeaders } from "../../lib/auth"
 import { StatusCodes } from "http-status-codes"
 import { createProblemDetails, errorTypes } from "../../lib/errors"
 import { generate } from "../../lib/api/generate"
-
+/**
+ * Handles synchronous generation requests.
+ *
+ * @param event - The API Gateway event containing the generation parameters (prompt) in the body.
+ * @returns A promise that resolves to the API Gateway response with the generation result.
+ */
 export const generateHandler = async (
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyStructuredResultV2> => {

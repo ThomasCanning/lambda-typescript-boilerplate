@@ -274,6 +274,184 @@ Resources:
           Name: email
           Required: false
 
+  GenerationJobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  GenerationDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  GenerationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt GenerationDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  apiGenerateStartFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/generate-start.generateStartHandler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          GENERATION_QUEUE_URL: !Ref GenerationQueue
+          DDB_ENDPOINT: ""
+          SQS_ENDPOINT: ""
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/generate/start
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GenerationJobsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt GenerationQueue.QueueName
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/generate-start.ts
+
+  apiGenerateStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/generate-status.generateStatusHandler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          DDB_ENDPOINT: ""
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/generate/status/{jobId}
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GenerationJobsTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/generate-status.ts
+
+  apiGenerateChoicesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/generate-choices.generateChoicesHandler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          GENERATION_QUEUE_URL: !Ref GenerationQueue
+          DDB_ENDPOINT: ""
+          SQS_ENDPOINT: ""
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/generate/choices/{jobId}
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GenerationJobsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt GenerationQueue.QueueName
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/generate-choices.ts
+
+  apiGenerateStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/generate-stream.generateStreamHandler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          DDB_ENDPOINT: ""
+          ALLOWED_ORIGINS: !Join [',', !Ref AllowedClientOrigins]
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/generate/stream/{jobId}
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GenerationJobsTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/generate-stream.ts
+
+  apiGenerateWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/queue/generate-worker.generateWorkerHandler
+      MemorySize: 1024  # Increased from default 128MB to handle AI workloads
+      Timeout: 300  # Increased to 5 minutes to match queue visibility timeout
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          GOOGLE_APPLICATION_CREDENTIALS: "/var/task/google-credentials.json"
+          DDB_ENDPOINT: ""
+          SQS_ENDPOINT: ""
+          GENERATION_QUEUE_URL: !Ref GenerationQueue
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt GenerationQueue.Arn
+            BatchSize: 1  # Process one message at a time to avoid memory issues
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GenerationJobsTable
+        - SQSPollerPolicy:
+            QueueName: !GetAtt GenerationQueue.QueueName
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/queue/generate-worker.ts
+
 
 
 Outputs:
