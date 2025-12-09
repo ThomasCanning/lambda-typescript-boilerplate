@@ -1,0 +1,50 @@
+name: Deploy Prod
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # Required for requesting the JWT
+  contents: read    # Required for actions/checkout
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Python (for SAM)
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy
+        env:
+          # Your new smart code will read this variable and create the file automatically!
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          VERTEX_AI_API_KEY: ${{ secrets.VERTEX_AI_API_KEY }}
+          GOOGLE_VERTEX_PROJECT: ${{ secrets.GOOGLE_VERTEX_PROJECT }}
+          GOOGLE_VERTEX_LOCATION: ${{ secrets.GOOGLE_VERTEX_LOCATION }}
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+        run: |
+          make prod
