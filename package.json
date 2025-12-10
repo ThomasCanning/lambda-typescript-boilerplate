@@ -13,6 +13,7 @@
     "@aws-sdk/client-sqs": "^3.922.0",
     "@aws-sdk/lib-dynamodb": "^3.398.0",
     "@mastra/core": "^0.24.6",
+    "@mastra/dynamodb": "^0.15.12",
     "accept-language": "^3.0.20",
     "apify-client": "^2.20.0",
     "aws-jwt-verify": "^4.0.1",

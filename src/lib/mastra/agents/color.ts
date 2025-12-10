@@ -1,18 +1,11 @@
 import { Agent } from "@mastra/core/agent"
 import { vertex } from "../providers/vertex"
+import { z } from "zod"
 
-const ONLY_JSON =
-  "CRITICAL: Return ONLY raw JSON starting with { and ending with }. No markdown code blocks (no ```json or ```), no backticks, no explanations before or after."
-
-let colorAgentInstance: Agent | null = null
-
-export function getColorAgent() {
-  if (colorAgentInstance) return colorAgentInstance
-
-  colorAgentInstance = new Agent({
-    name: "color-palette-agent",
-    model: vertex("gemini-2.0-flash"),
-    instructions: `You are an expert color designer creating personalized color palettes for a PERSONAL PORTFOLIO WEBSITE. This is a personal portfolio site built from a person's LinkedIn profile data - it should reflect their unique professional identity and personality.
+export const colorAgent = new Agent({
+  name: "color-palette-agent",
+  model: vertex("gemini-2.0-flash"),
+  instructions: `You are an expert color designer creating personalized color palettes for a PERSONAL PORTFOLIO WEBSITE. This is a personal portfolio site built from a person's LinkedIn profile data - it should reflect their unique professional identity and personality.
 
 ## Your Task
 Create SIX distinct, visually cohesive color palettes for this personal portfolio website. Each palette must include: primary, secondary, background, text, and accent colors (all as hex codes).
@@ -45,7 +38,6 @@ Use these actual extracted colors as the foundation for your palettes - do not m
 - Dark grey (#212121) → "Charcoal", "Midnight", "Noir" (NOT "Dark")
 
 ## Output Format
-${ONLY_JSON}
 Return ONLY valid JSON:
 {
   "options": [
@@ -67,7 +59,18 @@ Return ONLY valid JSON:
 - Ensure text has sufficient contrast with background (WCAG AA)
 - Make it personal - consider their profile deeply
 - All palettes must be suitable for a personal portfolio website and work together as a colour scheme.`,
-  })
+})
 
-  return colorAgentInstance
-}
+export const paletteOptionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  primary: z.string(),
+  secondary: z.string(),
+  background: z.string(),
+  text: z.string(),
+  accent: z.string(),
+})
+
+export const colorOptionsSchema = z.object({
+  options: z.array(paletteOptionSchema),
+})

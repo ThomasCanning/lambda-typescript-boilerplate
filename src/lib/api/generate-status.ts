@@ -162,3 +162,56 @@ export async function updateJobStatus(
     })
   )
 }
+
+export async function updateJobAgentState(
+  jobId: string,
+  agent: "color" | "copy" | "senior",
+  state: "idle" | "thinking" | "waiting_for_user" | "completed"
+) {
+  const tableName = getEnvVar("GENERATION_JOBS_TABLE")
+  const dynamoClient = createDynamoClient()
+  const now = new Date().toISOString()
+  const { UpdateCommand } = await import("@aws-sdk/lib-dynamodb")
+
+  await dynamoClient.send(
+    new UpdateCommand({
+      TableName: tableName,
+      Key: { jobId },
+      UpdateExpression: "SET agentStates.#agent = :state, updatedAt = :updatedAt",
+      ExpressionAttributeNames: {
+        "#agent": agent,
+      },
+      ExpressionAttributeValues: {
+        ":state": state,
+        ":updatedAt": now,
+      },
+    })
+  )
+}
+
+export async function updateJobPartial(
+  jobId: string,
+  key: keyof GeneratePartialsStatus,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  value: any
+) {
+  const tableName = getEnvVar("GENERATION_JOBS_TABLE")
+  const dynamoClient = createDynamoClient()
+  const now = new Date().toISOString()
+  const { UpdateCommand } = await import("@aws-sdk/lib-dynamodb")
+
+  await dynamoClient.send(
+    new UpdateCommand({
+      TableName: tableName,
+      Key: { jobId },
+      UpdateExpression: "SET partials.#key = :value, updatedAt = :updatedAt",
+      ExpressionAttributeNames: {
+        "#key": key,
+      },
+      ExpressionAttributeValues: {
+        ":value": value,
+        ":updatedAt": now,
+      },
+    })
+  )
+}

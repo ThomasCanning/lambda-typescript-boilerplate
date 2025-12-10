@@ -1,15 +1,11 @@
 import { Agent } from "@mastra/core/agent"
 import { vertex } from "../providers/vertex"
+import { z } from "zod"
 
-let seniorBuilderAgentInstance: Agent | null = null
-
-export function getSeniorBuilderAgent() {
-  if (seniorBuilderAgentInstance) return seniorBuilderAgentInstance
-
-  seniorBuilderAgentInstance = new Agent({
-    name: "senior-builder-agent",
-    model: vertex("gemini-3-pro-preview"),
-    instructions: `You are the architect responsible for assembling the final website.
+export const seniorBuilderAgent = new Agent({
+  name: "senior-builder-agent",
+  model: vertex("gemini-3-pro-preview"),
+  instructions: `You are the architect responsible for assembling the final website.
     
 Your Goal:
 Given the following inputs:
@@ -38,7 +34,15 @@ CRITICAL OUTPUT FORMAT RULES:
 - The JSON structure must be: {"index_html": "<!DOCTYPE html><html>...</html>"}
 - DO NOT use \`\`\`json or \`\`\` markers.
 - DO NOT include any text before or after the JSON object.`,
-  })
+}) // Escaping backticks inside the string is not needed for the file content itself if the string is just the file content.
+// Wait, the string content contains backticks? `\`\`\`json` -> this I SHOULD escape if I am writing a template literal in TS?
+// Actually if I use ` for the instructions string, I cannot have unescaped ` inside it.
+// The instructions contain "DO NOT use ```json or ``` markers."
+// So I DO need to escape those inner backticks.
+// But the Outer backticks defining the string should NOT have a backslash before them in the file.
+// The previous error was `instructions: \`You ...` which is definitely wrong.
+// But `instructions: ` ... \`\`\` ... `` is correct.
 
-  return seniorBuilderAgentInstance
-}
+export const finalBuildSchema = z.object({
+  index_html: z.string(),
+})

@@ -53,7 +53,6 @@ export function useGenerate() {
 
         // Stop polling if job is complete
         if (status.status === "succeeded" || status.status === "failed") {
-          console.log(`Polling stopped. Status: ${status.status}`)
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current)
             pollIntervalRef.current = undefined

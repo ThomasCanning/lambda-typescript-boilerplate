@@ -77,7 +77,7 @@ export const linkedInProfileSchema = z.object({
   basic_info: basicInfoSchema.optional(),
   experience: z.array(experienceSchema).optional(),
   education: z.array(educationSchema).optional(),
-  featured: z.array(z.unknown()).optional(), // Can be expanded if needed
+  featured: z.array(z.unknown()).optional(),
 })
 
 export type LinkedInProfile = z.infer<typeof linkedInProfileSchema>
@@ -89,8 +89,6 @@ function extractUsernameFromUrl(url: string): string | null {
 }
 
 export async function fetchLinkedInProfiles(profileUrls: string[]) {
-  console.log("LinkedIn Profile Tool called with URLs:", profileUrls)
-
   const apiToken = process.env.APIFY_API_TOKEN
   if (!apiToken) {
     return {

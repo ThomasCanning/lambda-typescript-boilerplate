@@ -14,7 +14,6 @@ export const generateStatusHandler = async (
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyStructuredResultV2> => {
   const jobId = event.pathParameters?.jobId
-  console.log(`[generate-status] checking status for job: ${jobId}`)
 
   if (!jobId) {
     return {
