@@ -71,46 +71,6 @@ jest.mock("@aws-sdk/client-sqs", () => ({
   SQSClient: function SQSClient() {},
 }))
 
-jest.mock("../../../src/lib/api/generate", () => {
-  return {
-    runGenerateJob: async (
-      _prompt: string,
-      onProgress: (u: {
-        step: "awaiting_choices"
-        message: string
-        partials: Record<string, unknown>
-      }) => Promise<void>
-    ) => {
-      await onProgress({
-        step: "awaiting_choices",
-        message: "options ready",
-        partials: {
-          profileData: { name: "Test" },
-          colorOptions: { options: [{ id: "palette-1" }] },
-          copyOptions: { options: [{ id: "copy-1" }] },
-        },
-      })
-    },
-  }
-})
-
-jest.mock("../../../src/lib/mastra/agents", () => {
-  return {
-    getCopywriterAgent: () => ({
-      generate: async () => Promise.resolve({ text: "{}" }),
-    }),
-    getColorAgent: () => ({
-      generate: async () => Promise.resolve({ text: "{}" }),
-    }),
-    getSeniorBuilderAgent: () => ({
-      generate: async () =>
-        Promise.resolve({
-          text: JSON.stringify({ index_html: "<html>final</html>" }),
-        }),
-    }),
-  }
-})
-
 const sendMock = jest.requireMock("@aws-sdk/lib-dynamodb").__sendMock as jest.Mock
 
 const buildSQSEvent = (body: Record<string, unknown>): SQSEvent => ({

@@ -88,7 +88,7 @@
       ]
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!jose|@mastra/core|@sindresorhus|escape-string-regexp)"
+      "node_modules/(?!jose|@mastra/core|@sindresorhus|escape-string-regexp|p-map)"
     ],
     "moduleNameMapper": {
       "^jose$": "<rootDir>/__tests__/__mocks__/jose.ts"

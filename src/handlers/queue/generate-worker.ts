@@ -131,7 +131,7 @@ async function handleWorkflowResult(jobId: string, result: WorkflowResult) {
   }
 }
 
-export const handler = async (event: { Records: SQSRecord[] }) => {
+export const generateWorkerHandler = async (event: { Records: SQSRecord[] }) => {
   for (const record of event.Records) {
     await processRecord(record)
   }
