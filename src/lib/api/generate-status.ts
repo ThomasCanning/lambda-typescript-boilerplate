@@ -60,7 +60,11 @@ function createDynamoClient(): DynamoDBDocumentClient {
     }
   }
 
-  return DynamoDBDocumentClient.from(new DynamoDBClient(config))
+  return DynamoDBDocumentClient.from(new DynamoDBClient(config), {
+    marshallOptions: {
+      removeUndefinedValues: true,
+    },
+  })
 }
 
 function getEnvVar(name: string): string {

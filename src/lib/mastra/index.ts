@@ -16,6 +16,8 @@ export const mastra = new Mastra({
     config: {
       tableName,
       region,
+      // @ts-expect-error - removeUndefinedValues is missing from type but required for runtime
+      removeUndefinedValues: true,
     },
   }),
   // Add your agents here

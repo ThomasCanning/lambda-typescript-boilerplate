@@ -1,8 +1,11 @@
+process.env.GOOGLE_CREDENTIALS_JSON = "{}"
 import { generateWorkerHandler } from "../../../src/handlers/queue/generate-worker"
 import { SQSEvent } from "aws-lambda/trigger/sqs"
 
 jest.mock("../../../src/lib/mastra/workflows/website-builder", () => ({
   websiteBuilderWorkflow: {
+    __registerMastra: jest.fn(),
+    __registerPrimitives: jest.fn(),
     createRunAsync: jest.fn().mockResolvedValue({
       start: jest.fn().mockResolvedValue({
         status: "suspended",
@@ -11,6 +14,10 @@ jest.mock("../../../src/lib/mastra/workflows/website-builder", () => ({
           colorOptions: { options: [{ id: "palette-1" }] },
           copyOptions: { options: [{ id: "copy-1" }] },
         },
+      }),
+      resume: jest.fn().mockResolvedValue({
+        status: "success",
+        context: {},
       }),
     }),
   },
@@ -65,6 +72,7 @@ jest.mock("@aws-sdk/lib-dynamodb", () => {
 
 jest.mock("@aws-sdk/client-dynamodb", () => ({
   DynamoDBClient: function DynamoDBClient() {},
+  DescribeTableCommand: class {},
 }))
 
 jest.mock("@aws-sdk/client-sqs", () => ({
@@ -119,8 +127,8 @@ describe("HITL flow", () => {
     const updates = sendMock.mock.calls
       .map((call) => call[0])
       .filter((cmd) => cmd.constructor.name === "UpdateCommand")
-    expect(updates).toHaveLength(2)
-    const awaiting = updates[1].input as { ExpressionAttributeValues: Record<string, unknown> }
+    expect(updates).toHaveLength(3)
+    const awaiting = updates[2].input as { ExpressionAttributeValues: Record<string, unknown> }
     expect(awaiting.ExpressionAttributeValues[":status"]).toBe("awaiting_choices")
     const partials = awaiting.ExpressionAttributeValues[":partials"] as Record<string, unknown>
     expect(partials.colorOptions).toBeDefined()
@@ -137,6 +145,7 @@ describe("HITL flow", () => {
           copyOptions: { options: [{ id: "copy-1" }] },
         },
         choices: {},
+        mastraRunId: "run-1",
       },
     })) // initial job fetch
     sendMock.mockImplementationOnce(async () => ({})) // running update

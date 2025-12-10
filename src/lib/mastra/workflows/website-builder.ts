@@ -44,15 +44,18 @@ export const startStep = createStep({
 
     const profileData = result.object
 
+    // Sanitize profile data to remove undefined values for DynamoDB
+    const cleanProfileData = profileData ? JSON.parse(JSON.stringify(profileData)) : {}
+
     if (inputData.jobId) {
       await updateJobStatus(inputData.jobId, "running", {
         progressMessage: "Profile data fetched and cleaned! Starting design agents...",
-        partials: { profileData },
+        partials: { profileData: cleanProfileData },
         agentStates: { color: "idle", copy: "idle" },
       })
     }
 
-    return { profileData, jobId: inputData.jobId }
+    return { profileData: cleanProfileData, jobId: inputData.jobId }
   },
 })
 

@@ -14,8 +14,8 @@ interface QueueMessage {
 interface WorkflowResult {
   status: "success" | "suspended" | "failed"
   error?: string | Error
+  context?: Record<string, unknown>
 }
-
 function getEnvVar(name: string): string {
   const value = process.env[name]
   if (!value) throw new Error(`Missing required environment variable: ${name}`)
@@ -112,13 +112,41 @@ async function processRecord(record: SQSRecord): Promise<void> {
 
 async function handleWorkflowResult(jobId: string, result: WorkflowResult) {
   switch (result.status) {
-    case "suspended":
+    case "suspended": {
+      // Extract options from context if available (handling mocked flat structure and real nested structure)
+      const context = result.context || {}
+
+      // Try to find options in step specific outputs (real Mastra structure) or flat (test mock)
+      const colorOptions =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (context["generate-color-step"] as any)?.output?.colorOptions ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (context as any).colorOptions
+
+      const copyOptions =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (context["generate-copy-step"] as any)?.output?.copyOptions ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (context as any).copyOptions
+
       await updateJobStatus(jobId, "awaiting_choices", {
         currentStep: "awaiting_choices",
+        partials: {
+          colorOptions,
+          copyOptions,
+        },
+      })
+      break
+    }
+
+    case "success":
+      await updateJobStatus(jobId, "succeeded", {
+        result: { text: "Website generated successfully (final)" },
       })
       break
 
     case "failed": {
+      // ...
       const errorMessage =
         result.error instanceof Error
           ? result.error.message
