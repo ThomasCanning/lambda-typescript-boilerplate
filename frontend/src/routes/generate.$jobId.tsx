@@ -64,7 +64,18 @@ function GeneratePage() {
   // -- Agent State Synthesis --
   // Scraper is "Running" if job is started but no profile data yet.
   // It is "Done" if profile data exists.
-  const isScraperDone = !!partials.profileData
+  // Scraper is "Done" if profile data exists OR if any downstream agent has started.
+  const hasDownstreamActivity =
+    agentStates.color === "thinking" ||
+    agentStates.color === "waiting_for_user" ||
+    agentStates.color === "completed" ||
+    agentStates.copy === "thinking" ||
+    agentStates.copy === "waiting_for_user" ||
+    agentStates.copy === "completed" ||
+    agentStates.senior === "thinking" ||
+    agentStates.senior === "completed"
+
+  const isScraperDone = !!partials.profileData || hasDownstreamActivity
   const isScraperRunning =
     !isScraperDone && (jobStatus?.status === "running" || jobStatus?.status === "pending")
 

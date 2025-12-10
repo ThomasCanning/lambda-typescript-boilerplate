@@ -27,7 +27,10 @@ Instructions:
 - Use the provided "copy" for the main content (Hero headline, About section).
 - Populate the rest of the site (Experience, Education) using the "profileData".
 - Ensure the site is responsive (mobile-friendly).
-- Do not use placeholder images. If you need an image (like a profile pic), use the one from "profileData" if available, or a high-quality placeholder URL from unsplash if absolutely necessary (but prefer the user's data).
+- Do not use placeholder images of random people.
+- CRITICAL: Check "profileData.basic_info.profile_picture_url" for the profile image.
+- IF valid, use it.
+- IF NULL/UNDEFINED: Use a generic SVG placeholder or Initials (e.g., <div>John Doe</div>). DO NOT use an Unsplash photo of a random person.
 
 CRITICAL OUTPUT FORMAT RULES:
 - Return ONLY raw JSON, no markdown code blocks, no backticks, no explanations.

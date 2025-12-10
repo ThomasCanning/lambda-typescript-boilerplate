@@ -218,7 +218,7 @@ export const selectionStep = createStep({
       if (inputData.jobId) {
         await updateJobStatus(inputData.jobId, "running", {
           agentStates: { color: "waiting_for_user", copy: "waiting_for_user" },
-          partials: { colorOptions, copyOptions },
+          partials: { profileData: inputData.profileData, colorOptions, copyOptions },
         })
       }
 
@@ -330,7 +330,12 @@ export const seniorStep = createStep({
     if (inputData.jobId) {
       await updateJobStatus(inputData.jobId, "succeeded", {
         agentStates: { senior: "completed" },
-        partials: { finalHtml },
+        partials: {
+          finalHtml,
+          profileData: inputData.profileData,
+          colorOptions: inputData.colorOptions,
+          copyOptions: inputData.copyOptions,
+        },
         progressMessage: "Website created!",
       })
     }
