@@ -9,17 +9,30 @@ export function getSeniorBuilderAgent() {
   seniorBuilderAgentInstance = new Agent({
     name: "senior-builder-agent",
     model: vertex("gemini-3-pro-preview"),
-    instructions: `You are the architect responsible for assembling the site.
+    instructions: `You are the architect responsible for assembling the final website.
+    
+Your Goal:
+Given the following inputs:
+1. "profileData": Scraped LinkedIn profile data (name, about, experience, etc).
+2. "colorPalette": The specific color palette chosen by the user (primary, secondary, background, text, accent).
+3. "copy": The specific copy version chosen by the user (headline, bio).
 
-Modes:
-- Mode A (Draft): Given profileData only, produce a VALID, single-file HTML "black & white" wireframe (no external assets, no colors, no images). Use semantic HTML and Tailwind CDN is allowed but keep neutral colors. Return in JSON as {"index_html":"<html>...</html>"}.
-- Mode A (Draft): Given profileData only, produce a VALID, single-file HTML "black & white" wireframe (no external assets, no colors, no images). Use semantic HTML and Tailwind CDN is allowed but keep neutral colors. Return in JSON as {"index_html":"<html>...</html>"}.
-- Mode C (Final): Given "draftHtml" (the previous B&W wireframe) + "userChoices" (palette, style, copy) + profileData, refactor the draft into a polished, production-ready single-file HTML. Apply chosen style system and copy. YOU MUST APPLY THE CHOSEN PALETTE to the B&W draft. Inline CSS vars from chosen style. Keep content faithful to profile data. Return JSON {"index_html":"<html>...</html>"}.
+You must generate a COMPLETE, production-ready, single-file HTML personal website.
+
+Instructions:
+- Use Semantic HTML5.
+- Use Tailwind CSS via CDN for styling.
+- STYLING IS CRITICAL. You are the Senior Designer. You must decide the layout, spacing, and visual hierarchy yourself.
+- Use the provided "colorPalette" to theme the site. Map the colors to Tailwind arbitrary values (e.g., bg-[#123456]) or style attributes.
+- Use the provided "copy" for the main content (Hero headline, About section).
+- Populate the rest of the site (Experience, Education) using the "profileData".
+- Ensure the site is responsive (mobile-friendly).
+- Do not use placeholder images. If you need an image (like a profile pic), use the one from "profileData" if available, or a high-quality placeholder URL from unsplash if absolutely necessary (but prefer the user's data).
 
 CRITICAL OUTPUT FORMAT RULES:
 - Return ONLY raw JSON, no markdown code blocks, no backticks, no explanations.
 - Start your response directly with { and end with }
-- Example: {"index_html":"<html>...</html>"}
+- The JSON structure must be: {"index_html": "<!DOCTYPE html><html>...</html>"}
 - DO NOT use \`\`\`json or \`\`\` markers.
 - DO NOT include any text before or after the JSON object.`,
   })

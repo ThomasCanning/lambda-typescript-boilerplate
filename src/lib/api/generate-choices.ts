@@ -67,32 +67,24 @@ export async function submitGenerateChoices(
     throw new Error("Job not found")
   }
 
-  // Merge existing choices with new choices (don't overwrite)
+  // Merge existing choices with new choices for validation and status calculation
+  // We still do this in memory to determine WHAT to write and verify correctness
   const existingChoices = (existing.Item.choices as ChoicesPayload | undefined) || {}
   const mergedChoices: ChoicesPayload = {
     ...existingChoices,
-    ...choices, // New choices override existing ones
+    ...choices,
   }
 
-  // Log for debugging
-  console.log("[generate-choices] Choices merge:", {
-    jobId,
-    incoming: choices,
-    existing: existingChoices,
-    merged: mergedChoices,
-  })
-
-  // Validate merged choices (after merging, so we check the complete set)
+  // Validate merged choices
   if (
     !mergedChoices.selectedPaletteId &&
     !mergedChoices.selectedCopyId &&
     !mergedChoices.selectedStyleId
   ) {
-    console.error("[generate-choices] Validation failed - no selections:", mergedChoices)
     throw new Error("At least one selection is required")
   }
 
-  // If submitting style, all three selections must be present
+  // Strict validation for final submission
   if (choices.selectedStyleId) {
     if (
       !mergedChoices.selectedPaletteId ||
@@ -102,50 +94,70 @@ export async function submitGenerateChoices(
       throw new Error("Palette, copy, and style selections are all required for final generation")
     }
   }
-  // Otherwise, allow incremental submissions (just palette, just copy, or both)
-  // No additional validation needed - the queue worker will handle the flow
 
-  // Determine status based on what's being submitted
-  // If palette is submitted, we go to "running" state to process color injection
-  // If style is submitted, we go to "running" state to process final build
   const newStatus: GenerateJobStatus =
     choices.selectedPaletteId || choices.selectedStyleId ? "running" : "awaiting_choices"
 
-  // Remove undefined values from choices before storing in DynamoDB
-  // DynamoDB doesn't accept undefined values
+  // Prepare cleaned choices for SQS (remove undefineds)
   const cleanedChoices: ChoicesPayload = {}
-  if (mergedChoices.selectedPaletteId) {
+  if (mergedChoices.selectedPaletteId)
     cleanedChoices.selectedPaletteId = mergedChoices.selectedPaletteId
-  }
-  if (mergedChoices.selectedCopyId) {
-    cleanedChoices.selectedCopyId = mergedChoices.selectedCopyId
-  }
-  if (mergedChoices.selectedStyleId) {
-    cleanedChoices.selectedStyleId = mergedChoices.selectedStyleId
+  if (mergedChoices.selectedCopyId) cleanedChoices.selectedCopyId = mergedChoices.selectedCopyId
+  if (mergedChoices.selectedStyleId) cleanedChoices.selectedStyleId = mergedChoices.selectedStyleId
+
+  // --- ATOMIC DYNAMODB UPDATE ---
+  // We check if 'choices' map exists to handle initialization vs nested updates
+  const hasChoicesMap = !!existing.Item.choices
+
+  if (!hasChoicesMap) {
+    // Initialize map if missing
+    // We can just regular update here since we know it was empty
+    await dynamoClient.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: { jobId },
+        UpdateExpression: "SET choices = if_not_exists(choices, :empty)",
+        ExpressionAttributeValues: { ":empty": {} },
+      })
+    )
   }
 
-  // Update status and store selections
+  // Construct atomic update for fields
+  const updateParts: string[] = ["#status = :status", "#updatedAt = :updatedAt"]
+  const attributeNames: Record<string, string> = {
+    "#status": "status",
+    "#updatedAt": "updatedAt",
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const attributeValues: Record<string, any> = {
+    ":status": newStatus,
+    ":updatedAt": new Date().toISOString(),
+  }
+
+  if (choices.selectedPaletteId) {
+    updateParts.push("choices.selectedPaletteId = :paletteId")
+    attributeValues[":paletteId"] = choices.selectedPaletteId
+  }
+  if (choices.selectedCopyId) {
+    updateParts.push("choices.selectedCopyId = :copyId")
+    attributeValues[":copyId"] = choices.selectedCopyId
+  }
+  if (choices.selectedStyleId) {
+    updateParts.push("choices.selectedStyleId = :styleId")
+    attributeValues[":styleId"] = choices.selectedStyleId
+  }
+
   await dynamoClient.send(
     new UpdateCommand({
       TableName: tableName,
       Key: { jobId },
-      UpdateExpression: "SET #status = :status, #updatedAt = :updatedAt, #choices = :choices",
-      ExpressionAttributeNames: {
-        "#status": "status",
-        "#updatedAt": "updatedAt",
-        "#choices": "choices",
-      },
-      ExpressionAttributeValues: {
-        ":status": newStatus,
-        ":updatedAt": new Date().toISOString(),
-        ":choices": cleanedChoices,
-      },
+      UpdateExpression: `SET ${updateParts.join(", ")}`,
+      ExpressionAttributeNames: attributeNames,
+      ExpressionAttributeValues: attributeValues,
     })
   )
 
-  // Send SQS message if we have a palette selection (to trigger color injection)
-  // OR if we have a style selection (to trigger final build)
-  // We trigger on palette selection even without copy, so the worker can generate the colored draft
+  // Send SQS message logic
   if (choices.selectedPaletteId || choices.selectedStyleId) {
     await sqsClient.send(
       new SendMessageCommand({
@@ -153,7 +165,7 @@ export async function submitGenerateChoices(
         MessageBody: JSON.stringify({
           jobId,
           selectedPaletteId: cleanedChoices.selectedPaletteId,
-          selectedCopyId: cleanedChoices.selectedCopyId, // Might be undefined, which is fine
+          selectedCopyId: cleanedChoices.selectedCopyId,
           selectedStyleId: cleanedChoices.selectedStyleId,
         }),
       })

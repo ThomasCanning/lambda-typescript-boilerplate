@@ -28,26 +28,27 @@ export interface GenerateStatusResponse {
   status: GenerateJobStatus
   currentStep?: string
   progressMessage?: string
+  agentStates?: {
+    color?: "idle" | "thinking" | "waiting_for_user" | "completed"
+    copy?: "idle" | "thinking" | "waiting_for_user" | "completed"
+    senior?: "idle" | "thinking" | "completed"
+  }
   updatedAt?: string
   result?: GenerateResult
   error?: string
   partials?: {
     profileData?: unknown
-    draftHtml?: string
     colorOptions?: unknown
     copyOptions?: unknown
-    styleOptions?: unknown
     finalHtml?: string
     choices?: {
       selectedPaletteId?: string
       selectedCopyId?: string
-      selectedStyleId?: string
     }
   }
   choices?: {
     selectedPaletteId?: string
     selectedCopyId?: string
-    selectedStyleId?: string
   }
 }
 

@@ -15,7 +15,7 @@ export ADMIN_PASSWORD
 export VERTEX_AI_API_KEY
 export GOOGLE_VERTEX_PROJECT
 export GOOGLE_VERTEX_LOCATION
-export GOOGLE_CREDENTIALS_JSON
+
 export APIFY_API_TOKEN
 
 TF_DIR      ?= infrastructure
@@ -79,7 +79,16 @@ _dev-deploy:
 	@if aws cloudformation describe-stacks --stack-name $(STACK_NAME) --region $(REGION) >/dev/null 2>&1; then \
 		$(MAKE) refresh-dev-env; \
 		echo "🚀 Syncing to dev stack (watch mode)..."; \
-		AWS_REGION=$(REGION) sam sync --watch --stack-name $(STACK_NAME) --region $(REGION); \
+		AWS_REGION=$(REGION) sam sync --watch --stack-name $(STACK_NAME) --region $(REGION) \
+			--parameter-overrides \
+				RootDomainName=$(ROOT_DOMAIN) \
+				AdminUsername=$(or $(ADMIN_USERNAME),admin) \
+				AllowedClientOrigins="$(or $(ALLOWED_ORIGINS),http://localhost:5173)" \
+				VertexAiApiKey=$(VERTEX_AI_API_KEY) \
+				GoogleVertexProject=$(GOOGLE_VERTEX_PROJECT) \
+				GoogleVertexLocation=$(or $(GOOGLE_VERTEX_LOCATION),us-central1) \
+				GoogleCredentialsJson="$$(cat google-credentials.json | tr -d '\n' | base64 | tr -d '\n')" \
+				ApifyApiToken=$(APIFY_API_TOKEN); \
 	else \
 		echo "🚀 Creating dev stack (first deployment)..."; \
 		$(MAKE) sam-deploy; \
@@ -127,7 +136,8 @@ prod:
 .PHONY: deployment-complete
 deployment-complete:
 	@# Generate DNS records file
-	@API_TARGET=$$(cd $(TF_DIR) && terraform output -raw api_gateway_target 2>/dev/null); \
+	@eval $$(aws configure export-credentials --profile default --format env) && \
+	API_TARGET=$$(cd $(TF_DIR) && terraform output -raw api_gateway_target 2>/dev/null); \
 	CF_TARGET=$$(cd $(TF_DIR) && terraform output -raw cloudfront_web_client_target 2>/dev/null); \
 	API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "api"); \
 	echo "Type	Name	Value	TTL" > $(TF_DIR)/dns-records.txt; \
@@ -136,7 +146,8 @@ deployment-complete:
 	@$(MAKE) generate-outputs
 	@echo ""
 	@# Check if DNS is already configured correctly
-	@API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "api"); \
+	@eval $$(aws configure export-credentials --profile default --format env) && \
+	API_SUBDOMAIN=$$(cd $(TF_DIR) && terraform output -raw api_subdomain 2>/dev/null || echo "api"); \
 	EXPECTED_API_TARGET=$$(cd $(TF_DIR) && terraform output -raw api_gateway_target 2>/dev/null); \
 	PERM_DNS_OK=true; \
 	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_apigatewayv2_domain_name.api'; then \
@@ -178,7 +189,7 @@ deployment-complete:
 
 .PHONY: validate-dns
 validate-dns:
-	@if ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_acm_certificate.api'; then \
+	@if ! eval $$(aws configure export-credentials --profile default --format env) || ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_acm_certificate.api'; then \
 		echo "Error: No certificates found. Run 'make prod' first."; \
 		exit 1; \
 	fi
@@ -330,14 +341,9 @@ npm-install:
 	@cd frontend && npm ci
 
 sam-deploy: validate-password
+	@if [ ! -f google-credentials.json ]; then echo "Error: google-credentials.json not found"; exit 1; fi
 	AWS_REGION=$(REGION) sam build
-	@# Copy Google credentials into build output for deploy (so GOOGLE_APPLICATION_CREDENTIALS can point to a real file)
-	@if [ -f "google-credentials.json" ]; then \
-	  mkdir -p .aws-sam/build/apiGenerateFunction; \
-	  cp google-credentials.json .aws-sam/build/apiGenerateFunction/google-credentials.json; \
-	  mkdir -p .aws-sam/build/apiGenerateWorkerFunction; \
-	  cp google-credentials.json .aws-sam/build/apiGenerateWorkerFunction/google-credentials.json; \
-	fi
+
 	AWS_REGION=$(REGION) sam deploy --no-confirm-changeset --region $(REGION) \
 		--stack-name $(STACK_NAME) \
 		--parameter-overrides \
@@ -347,6 +353,7 @@ sam-deploy: validate-password
 			VertexAiApiKey=$(VERTEX_AI_API_KEY) \
 			GoogleVertexProject=$(GOOGLE_VERTEX_PROJECT) \
 			GoogleVertexLocation=$(or $(GOOGLE_VERTEX_LOCATION),us-central1) \
+			GoogleCredentialsJson="$$(cat google-credentials.json | tr -d '\n' | base64 | tr -d '\n')" \
 			ApifyApiToken=$(APIFY_API_TOKEN)
 
 set-admin-password: validate-password
@@ -406,7 +413,7 @@ generate-outputs:
 	@echo "# Infrastructure Outputs" > $(TF_DIR)/variableoutputs.txt; \
 	echo "# Generated: $$(date)" >> $(TF_DIR)/variableoutputs.txt; \
 	echo "" >> $(TF_DIR)/variableoutputs.txt; \
-	if terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_cloudfront_distribution.web_client'; then \
+	if eval $$(aws configure export-credentials --profile default --format env) && terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_cloudfront_distribution.web_client'; then \
 	  CF_ID=$$(cd $(TF_DIR) && terraform output -raw cloudfront_distribution_id 2>/dev/null); \
 	  CF_DOMAIN=$$(cd $(TF_DIR) && terraform output -raw cloudfront_web_client_target 2>/dev/null); \
 	  API_TARGET=$$(cd $(TF_DIR) && terraform output -raw api_gateway_target 2>/dev/null); \
@@ -434,7 +441,7 @@ deploy-frontend:
 	@echo "Building frontend..."
 	@cd frontend && npm install && npm run build
 	@# Deploy frontend files to S3 bucket
-	@if ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_s3_bucket.web_client'; then \
+	@if ! eval $$(aws configure export-credentials --profile default --format env) || ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_s3_bucket.web_client'; then \
 	  echo "S3 bucket not found. Skipping frontend deployment. Run 'make prod' again after infrastructure is created."; \
 	  exit 0; \
 	fi; \

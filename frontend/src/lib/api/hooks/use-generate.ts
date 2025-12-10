@@ -9,7 +9,7 @@ import {
   type GenerateStatusResponse,
 } from "../http/generate"
 
-const POLL_INTERVAL_MS = 1500
+const POLL_INTERVAL_MS = 3000
 const MAX_POLLS = 120 // ~3 minutes
 
 async function pollForResult(
@@ -46,7 +46,6 @@ export function useGenerate() {
       clearInterval(pollIntervalRef.current)
     }
 
-    // Poll immediately, then set up interval
     const poll = async () => {
       try {
         const status = await getGenerateStatus(jid)
@@ -54,6 +53,7 @@ export function useGenerate() {
 
         // Stop polling if job is complete
         if (status.status === "succeeded" || status.status === "failed") {
+          console.log(`Polling stopped. Status: ${status.status}`)
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current)
             pollIntervalRef.current = undefined
@@ -61,11 +61,14 @@ export function useGenerate() {
         }
       } catch (error) {
         console.error("Failed to poll job status", error)
-        // Continue polling on error (might be transient)
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current)
+          pollIntervalRef.current = undefined
+        }
       }
     }
 
-    void poll() // Poll immediately
+    void poll()
     pollIntervalRef.current = window.setInterval(() => void poll(), POLL_INTERVAL_MS)
   }
 
@@ -128,12 +131,16 @@ export function useGenerate() {
   return {
     ...mutation,
     jobStatus,
+    setJobId,
+    startPolling,
     jobId,
     submitPaletteCopy,
     submitStyle,
   } as typeof mutation & {
     jobStatus: typeof jobStatus
     jobId: typeof jobId
+    setJobId: typeof setJobId
+    startPolling: typeof startPolling
     submitPaletteCopy: typeof submitPaletteCopy
     submitStyle: typeof submitStyle
   }

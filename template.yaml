@@ -147,7 +147,8 @@ Resources:
       Handler: src/handlers/api/generate.generateHandler
       Environment:
         Variables:
-          GOOGLE_APPLICATION_CREDENTIALS: "/var/task/google-credentials.json"
+
+          GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
       Events:
         Api:
           Type: HttpApi
@@ -428,7 +429,8 @@ Resources:
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
-          GOOGLE_APPLICATION_CREDENTIALS: "/var/task/google-credentials.json"
+
+          GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
           DDB_ENDPOINT: ""
           SQS_ENDPOINT: ""
           GENERATION_QUEUE_URL: !Ref GenerationQueue

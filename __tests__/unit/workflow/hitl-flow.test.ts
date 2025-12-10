@@ -1,13 +1,12 @@
 import { generateWorkerHandler } from "../../../src/handlers/queue/generate-worker"
 import { SQSEvent } from "aws-lambda/trigger/sqs"
 
-jest.mock("../../../src/lib/mastra/workflows", () => ({
+jest.mock("../../../src/lib/mastra/workflows/website-builder", () => ({
   websiteBuilderWorkflow: {
     createRunAsync: jest.fn().mockResolvedValue({
       start: jest.fn().mockResolvedValue({
         status: "suspended",
         context: {
-          draftHtml: "<html>draft</html>",
           profileData: { name: "Test" },
           colorOptions: { options: [{ id: "palette-1" }] },
           copyOptions: { options: [{ id: "copy-1" }] },
@@ -15,18 +14,32 @@ jest.mock("../../../src/lib/mastra/workflows", () => ({
       }),
     }),
   },
-  colorInjectionStep: {
-    execute: jest.fn().mockResolvedValue({
-      status: "suspended",
-      data: {
-        draftHtml: "<html>draft</html>",
-        colorOptions: { options: [{ id: "palette-1" }] },
-        copyOptions: { options: [{ id: "copy-1" }] },
-        profileData: { name: "Test" },
-      },
+  selectionStep: {
+    execute: jest.fn().mockImplementation(async ({ resumeData, state }) => {
+      // Simulate resume logic
+      if (resumeData?.selectedPaletteId && resumeData?.selectedCopyId) {
+        return {
+          status: "success",
+          selectedPaletteId: resumeData.selectedPaletteId,
+          selectedCopyId: resumeData.selectedCopyId,
+          colorOptions: state.colorOptions || { options: [{ id: "palette-1" }] },
+          copyOptions: state.copyOptions || { options: [{ id: "copy-1" }] },
+        }
+      }
+      return {
+        status: "suspended",
+        data: {
+          colorOptions: state.colorOptions || { options: [{ id: "palette-1" }] },
+          copyOptions: state.copyOptions || { options: [{ id: "copy-1" }] },
+        },
+        suspendPayload: {
+          colorOptions: state.colorOptions || { options: [{ id: "palette-1" }] },
+          copyOptions: state.copyOptions || { options: [{ id: "copy-1" }] },
+        },
+      }
     }),
   },
-  finalBuildStep: {
+  seniorStep: {
     execute: jest.fn().mockResolvedValue({
       html: "<html>final</html>",
     }),
@@ -72,7 +85,6 @@ jest.mock("../../../src/lib/api/generate", () => {
         step: "awaiting_choices",
         message: "options ready",
         partials: {
-          draftHtml: "<html>draft</html>",
           profileData: { name: "Test" },
           colorOptions: { options: [{ id: "palette-1" }] },
           copyOptions: { options: [{ id: "copy-1" }] },
@@ -84,35 +96,11 @@ jest.mock("../../../src/lib/api/generate", () => {
 
 jest.mock("../../../src/lib/mastra/agents", () => {
   return {
-    getStyleAgent: () => ({
-      generate: async () =>
-        Promise.resolve({
-          text: JSON.stringify({
-            options: [
-              {
-                id: "style-1",
-                label: "Style 1",
-                layout_description: "Layout 1",
-                html_preview_snippet: "<div>preview 1</div>",
-                css_variables: { "--bg": "#fff" },
-              },
-              {
-                id: "style-2",
-                label: "Style 2",
-                layout_description: "Layout 2",
-                html_preview_snippet: "<div>preview 2</div>",
-                css_variables: { "--bg": "#000" },
-              },
-              {
-                id: "style-3",
-                label: "Style 3",
-                layout_description: "Layout 3",
-                html_preview_snippet: "<div>preview 3</div>",
-                css_variables: { "--bg": "#ccc" },
-              },
-            ],
-          }),
-        }),
+    getCopywriterAgent: () => ({
+      generate: async () => Promise.resolve({ text: "{}" }),
+    }),
+    getColorAgent: () => ({
+      generate: async () => Promise.resolve({ text: "{}" }),
     }),
     getSeniorBuilderAgent: () => ({
       generate: async () =>
@@ -137,6 +125,8 @@ const buildSQSEvent = (body: Record<string, unknown>): SQSEvent => ({
         SenderId: "sender",
         ApproximateFirstReceiveTimestamp: "0",
         SequenceNumber: "0",
+        MessageGroupId: "1",
+        MessageDeduplicationId: "1",
       },
       messageAttributes: {},
       md5OfBody: "",
@@ -173,15 +163,15 @@ describe("HITL flow", () => {
     const awaiting = updates[1].input as { ExpressionAttributeValues: Record<string, unknown> }
     expect(awaiting.ExpressionAttributeValues[":status"]).toBe("awaiting_choices")
     const partials = awaiting.ExpressionAttributeValues[":partials"] as Record<string, unknown>
-    expect(partials.draftHtml).toBeDefined()
+    expect(partials.colorOptions).toBeDefined()
+    expect(partials.copyOptions).toBeDefined()
   })
 
-  it("builds style options and waits for style selection", async () => {
+  it("finalizes after both choices are made", async () => {
     sendMock.mockImplementationOnce(async () => ({
       Item: {
         status: "awaiting_choices",
         partials: {
-          draftHtml: "<html>draft</html>",
           profileData: { name: "Test" },
           colorOptions: { options: [{ id: "palette-1" }] },
           copyOptions: { options: [{ id: "copy-1" }] },
@@ -190,8 +180,6 @@ describe("HITL flow", () => {
       },
     })) // initial job fetch
     sendMock.mockImplementationOnce(async () => ({})) // running update
-    // Combined fetch with initial so removing this one
-    sendMock.mockImplementation(() => ({})) // subsequent updates
     sendMock.mockImplementation(() => ({})) // subsequent updates
 
     await generateWorkerHandler(
@@ -199,46 +187,6 @@ describe("HITL flow", () => {
         jobId: "job-1",
         selectedPaletteId: "palette-1",
         selectedCopyId: "copy-1",
-      })
-    )
-
-    const awaitingStyle = sendMock.mock.calls
-      .map((c) => c[0])
-      .find(
-        (cmd) =>
-          cmd.constructor.name === "UpdateCommand" &&
-          (cmd.input as { ExpressionAttributeValues: Record<string, unknown> })
-            .ExpressionAttributeValues[":status"] === "awaiting_style"
-      )
-    expect(awaitingStyle).toBeDefined()
-  })
-
-  it("finalizes after style selection", async () => {
-    sendMock.mockImplementationOnce(async () => ({
-      Item: {
-        status: "awaiting_style",
-        partials: {
-          draftHtml: "<html>draft</html>",
-          profileData: { name: "Test" },
-          colorOptions: { options: [{ id: "palette-1" }] },
-          copyOptions: { options: [{ id: "copy-1" }] },
-          styleOptions: { options: [{ id: "style-1", label: "Style" }] },
-        },
-        choices: {
-          selectedPaletteId: "palette-1",
-          selectedCopyId: "copy-1",
-        },
-      },
-    })) // initial job fetch
-    sendMock.mockImplementationOnce(async () => ({})) // running update
-    // Combined fetch with initial so removing this one
-    sendMock.mockImplementation(() => ({})) // subsequent updates
-    sendMock.mockImplementation(() => ({})) // subsequent updates
-
-    await generateWorkerHandler(
-      buildSQSEvent({
-        jobId: "job-1",
-        selectedStyleId: "style-1",
       })
     )
 

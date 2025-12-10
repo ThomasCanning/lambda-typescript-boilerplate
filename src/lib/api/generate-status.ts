@@ -11,15 +11,12 @@ export type GenerateJobStatus =
 
 export interface GeneratePartialsStatus {
   profileData?: unknown
-  draftHtml?: string
   colorOptions?: unknown
   copyOptions?: unknown
-  styleOptions?: unknown
   finalHtml?: string
   choices?: {
     selectedPaletteId?: string
     selectedCopyId?: string
-    selectedStyleId?: string
   }
 }
 
@@ -28,6 +25,11 @@ export interface GenerateStatusResponse {
   status: GenerateJobStatus
   currentStep?: string
   progressMessage?: string
+  agentStates?: {
+    color?: "idle" | "thinking" | "waiting_for_user" | "completed"
+    copy?: "idle" | "thinking" | "waiting_for_user" | "completed"
+    senior?: "idle" | "thinking" | "completed"
+  }
   updatedAt?: string
   result?: unknown
   error?: string
@@ -35,7 +37,6 @@ export interface GenerateStatusResponse {
   choices?: {
     selectedPaletteId?: string
     selectedCopyId?: string
-    selectedStyleId?: string
   }
 }
 
@@ -89,27 +90,38 @@ export async function getGenerateStatus(jobId: string): Promise<GenerateStatusRe
     throw new NotFoundError(`Job not found: ${jobId}`)
   }
 
-  const { status, result, error, currentStep, progressMessage, updatedAt, partials, choices } =
-    response.Item as {
-      status: GenerateJobStatus
-      result?: unknown
-      error?: string
-      currentStep?: string
-      progressMessage?: string
-      updatedAt?: string
-      partials?: GeneratePartialsStatus
-      choices?: {
-        selectedPaletteId?: string
-        selectedCopyId?: string
-        selectedStyleId?: string
-      }
+  const {
+    status,
+    result,
+    error,
+    currentStep,
+    progressMessage,
+    agentStates,
+    updatedAt,
+    partials,
+    choices,
+  } = response.Item as {
+    status: GenerateJobStatus
+    result?: unknown
+    error?: string
+    currentStep?: string
+    progressMessage?: string
+    agentStates?: GenerateStatusResponse["agentStates"]
+    updatedAt?: string
+    partials?: GeneratePartialsStatus
+    choices?: {
+      selectedPaletteId?: string
+      selectedCopyId?: string
+      selectedStyleId?: string
     }
+  }
 
   return {
     jobId,
     status,
     currentStep,
     progressMessage,
+    agentStates,
     updatedAt,
     result,
     error,

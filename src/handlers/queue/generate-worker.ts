@@ -3,9 +3,9 @@ import { DynamoDBClient, DynamoDBClientConfig } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb"
 import {
   websiteBuilderWorkflow,
-  colorInjectionStep,
-  finalBuildStep,
-} from "../../lib/mastra/workflows"
+  selectionStep,
+  seniorStep,
+} from "../../lib/mastra/workflows/website-builder"
 import type { GenerateProgressUpdate } from "../../lib/api/generate"
 import { updateJobStatus } from "../../lib/api/generate-status"
 
@@ -14,7 +14,6 @@ interface QueueMessage {
   prompt?: string
   selectedPaletteId?: string
   selectedCopyId?: string
-  selectedStyleId?: string
 }
 
 function getEnvVar(name: string): string {
@@ -40,11 +39,27 @@ function mapContextToProgress(context: any): Partial<GenerateProgressUpdate["par
 
   if (!context) return partials
 
-  if (context.profileData) partials.profileData = context.profileData
-  if (context.draftHtml) partials.draftHtml = context.draftHtml
+  if (context.profileData) {
+    // Summarize profile data for the frontend/logs
+
+    const basic = context.profileData?.basic_info || {}
+    partials.profileData = {
+      basic_info: {
+        fullname: basic.fullname,
+        headline: basic.headline,
+        profile_picture_url: basic.profile_picture_url,
+      },
+    }
+  }
   if (context.colorOptions) partials.colorOptions = context.colorOptions
   if (context.copyOptions) partials.copyOptions = context.copyOptions
-  if (context.styleOptions) partials.styleOptions = context.styleOptions
+  // If we have selections from partial resume
+  if (context.selectedPaletteId || context.selectedCopyId) {
+    partials.choices = {
+      selectedPaletteId: context.selectedPaletteId,
+      selectedCopyId: context.selectedCopyId,
+    }
+  }
 
   return partials
 }
@@ -54,11 +69,11 @@ async function processRecord(record: SQSRecord): Promise<void> {
   const { jobId, prompt } = message
   if (!jobId) return
 
-  console.log(`[Worker] Processing Job: ${jobId}`, message)
+  console.log(`[Worker] Processing Job: ${jobId} `, message)
   const tableName = getEnvVar("GENERATION_JOBS_TABLE")
 
   try {
-    const isResume = Boolean(message.selectedPaletteId || message.selectedStyleId)
+    const isResume = Boolean(message.selectedPaletteId || message.selectedCopyId)
 
     // --- START NEW JOB ---
     if (!isResume) {
@@ -73,56 +88,169 @@ async function processRecord(record: SQSRecord): Promise<void> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = (await run.start({ inputData: { url: prompt!, jobId } })) as any
 
-      // Wait for completion or suspension
       if (result.status === "suspended") {
-        const suspendedState = result.context // Or wherever the state lives in the new result object. Assuming context based on previous code.
+        // Extract the payload from the suspended step by searching result.steps or result.context
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let suspendedState: any = result.context || {}
+
+        // Check new Mastra structure: result.steps
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((result as any).steps) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const steps = (result as any).steps as Record<
+            string,
+            { status: string; suspendPayload?: unknown; payload?: unknown; output?: unknown }
+          >
+          const suspendedStep = Object.values(steps).find((res) => res.status === "suspended")
+          if (suspendedStep) {
+            if (suspendedStep.suspendPayload) {
+              suspendedState = { ...suspendedState, ...suspendedStep.suspendPayload }
+            } else if (suspendedStep.output) {
+              suspendedState = { ...suspendedState, ...suspendedStep.output }
+            } else if (suspendedStep.payload) {
+              suspendedState = { ...suspendedState, ...suspendedStep.payload }
+            }
+          }
+        }
+        // Fallback to old context.stepResults if available
+        else if (result.context?.stepResults) {
+          const stepResults: Record<
+            string,
+            { status: string; suspendPayload?: unknown; payload?: unknown }
+          > = result.context.stepResults
+          const suspendedStep = Object.values(stepResults).find((res) => res.status === "suspended")
+          if (suspendedStep) {
+            if (suspendedStep.suspendPayload) {
+              suspendedState = { ...suspendedState, ...suspendedStep.suspendPayload }
+            } else if (suspendedStep.payload) {
+              suspendedState = { ...suspendedState, ...suspendedStep.payload }
+            }
+          }
+        }
+        // DO NOT CLOSE THE IF BLOCK HERE, as suspendedState is used below
+
+        // Clean logs by summarizing profile data
+        const loggableState = { ...suspendedState }
+        if (loggableState.profileData) {
+          const basic = loggableState.profileData?.basic_info || {}
+          loggableState.profileData = {
+            basic_info: {
+              fullname: basic.fullname,
+              headline: basic.headline,
+              // profile_picture_url: basic.profile_picture_url // Optional in logs?
+            },
+          }
+        }
+        console.log(
+          "[Worker] Workflow Suspended. Result Context (Summary):",
+          JSON.stringify(loggableState, null, 2)
+        )
+
         await updateJobStatus(jobId, "awaiting_choices", {
           currentStep: "awaiting_choices",
-          progressMessage: "Draft ready! Please select a color palette.",
+          progressMessage: "Draft ready! Please select options.",
+          agentStates: { color: "waiting_for_user", copy: "waiting_for_user" },
           partials: mapContextToProgress(suspendedState),
         })
-      } else {
-        console.warn("Workflow finished uniquely early or failed", result)
+      } else if (result.status === "failed") {
+        console.error("Workflow failed:", result.error)
+        await updateJobStatus(jobId, "failed", {
+          error: result.error || "Workflow failed due to an unknown error",
+        })
+      } else if (result.status === "success" && !result.context) {
+        console.warn("Workflow finished unexpectedly early", result)
+        await updateJobStatus(jobId, "failed", {
+          error: "Workflow finished unexpectedly early or returned no data.",
+        })
       }
       return
     }
 
-    // --- RESUME JOB (MANUAL STEP EXECUTION) ---
+    // --- RESUME JOB ---
     // Fetch state
     const job = await dynamoClient.send(new GetCommand({ TableName: tableName, Key: { jobId } }))
     const currentPartials = job.Item?.partials || {}
     const currentChoices = job.Item?.choices || {}
 
-    // B. Style/Copy Selected -> Final Build
-    if (message.selectedStyleId) {
-      console.log("Resuming: Style Selection -> Final Build")
-      await updateJobStatus(jobId, "running", { progressMessage: "Finalizing website..." })
+    // We assume we are in 'selectionStep' phase since that's the only suspension.
 
-      const inputData = { ...currentPartials, selectedPaletteId: currentChoices.selectedPaletteId }
-      const resumeData = {
-        selectedStyleId: message.selectedStyleId,
-        selectedCopyId: message.selectedCopyId || currentChoices.selectedCopyId, // handle cases where copy was picked earlier?
+    // 1. Re-hydrate Selection Step Input/State
+    const inputData = {
+      profileData: currentPartials.profileData,
+      jobId, // Pass jobId so we can update status inside agents if needed
+    }
+
+    // State comes from partials
+    const state = {
+      colorOptions: currentPartials.colorOptions,
+      copyOptions: currentPartials.copyOptions,
+      selectedPaletteId: currentChoices.selectedPaletteId,
+      selectedCopyId: currentChoices.selectedCopyId,
+    }
+
+    // Resume Data from Message
+    const resumeData = {
+      selectedPaletteId: message.selectedPaletteId,
+      selectedCopyId: message.selectedCopyId,
+    }
+
+    console.log("Resuming Selection Step", { state, resumeData })
+
+    // Execute Selection Step Resumption
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const selectionResult = (await selectionStep.execute({
+      inputData: inputData as any,
+      resumeData: resumeData as any,
+      state: state as any,
+      setState: () => {}, // State is managed via response/DB
+      suspend: (data: any) => ({ status: "suspended", data: data, suspendPayload: data }) as any,
+    } as any)) as unknown as {
+      status?: string
+      suspendPayload?: unknown
+      colorOptions?: any
+      copyOptions?: any
+      selectedPaletteId?: string
+      selectedCopyId?: string
+    }
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+
+    // If it suspended again (partial choice), update DB and wait
+    if (selectionResult.status === "suspended") {
+      console.log("Selection step suspended (partial selection).")
+      await updateJobStatus(jobId, "awaiting_choices", {
+        currentStep: "awaiting_choices",
+        // The payload contains the new state (e.g. one ID selected)
+        partials: mapContextToProgress(selectionResult.suspendPayload),
+      })
+      return
+    }
+
+    // If it finished, we have both choices! Proceed to Senior Step.
+    if (selectionResult.selectedPaletteId && selectionResult.selectedCopyId) {
+      console.log("Selection Complete. Starting Senior Step.")
+
+      // Execute Senior Step manually
+      const seniorInput = {
+        profileData: currentPartials.profileData,
+        colorOptions: selectionResult.colorOptions || currentPartials.colorOptions,
+        copyOptions: selectionResult.copyOptions || currentPartials.copyOptions,
+        selectedPaletteId: selectionResult.selectedPaletteId,
+        selectedCopyId: selectionResult.selectedCopyId,
+        jobId,
       }
-      const state = { ...currentPartials, selectedPaletteId: currentChoices.selectedPaletteId }
 
-      // Execute Final Step
-      // The final step returns { html }, not a suspend object
-      const result = await finalBuildStep.execute({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        inputData: inputData as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        resumeData: resumeData as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        state: state as any,
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const finalResult = await seniorStep.execute({
+        inputData: seniorInput as any,
+        state: {} as any,
         setState: () => {},
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        suspend: () => ({}) as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        suspend: () => ({}) as any, // Should not suspend
       } as any)
+      /* eslint-enable @typescript-eslint/no-explicit-any */
 
-      // @ts-expect-error - Runtime result handling
+      // Final Result Handling
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const html = result?.html || result?.payload?.html || (result as any)?.text
+      const html = finalResult?.html || (finalResult as any)?.payload?.html
 
       if (html) {
         await updateJobStatus(jobId, "succeeded", {
@@ -131,66 +259,10 @@ async function processRecord(record: SQSRecord): Promise<void> {
           result: { text: html },
           partials: { ...currentPartials, finalHtml: html },
         })
+      } else {
+        await updateJobStatus(jobId, "failed", { error: "Senior agent returned no HTML" })
       }
-      return
     }
-
-    // A. Color Selected -> Intermediate Upgrade (Draft + Color)
-    if (message.selectedPaletteId) {
-      console.log("Resuming: Color Selection -> Injection Phase")
-      await updateJobStatus(jobId, "running", {
-        progressMessage: "Injecting colors & generating styles...",
-      })
-
-      // Map state for color injection step
-      const inputData = {
-        profileData: currentPartials.profileData,
-        draftHtml: currentPartials.draftHtml,
-        colorOptions: currentPartials.colorOptions,
-        copyOptions: currentPartials.copyOptions,
-      }
-      const state = { ...currentPartials }
-      const resumeData = { selectedPaletteId: message.selectedPaletteId }
-
-      // Execute Color Injection Step
-
-      const result = (await colorInjectionStep.execute({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        inputData: inputData as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        resumeData: resumeData as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        state: state as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setState: (s: any) => {
-          Object.assign(state, s)
-        },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        suspend: (data: any) => ({ status: "suspended", data: data }) as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any)) as any
-
-      // If it returned a suspended result (which it should), we update DB
-      if (result && result.status === "suspended") {
-        await updateJobStatus(jobId, "awaiting_style", {
-          currentStep: "awaiting_style",
-          progressMessage: "Colors injected! Select a style to finish.",
-          // Merge the new state back into partials
-          partials: mapContextToProgress({ ...state, ...result.data }),
-        })
-      }
-      // Handle SUCCESSFUL completion (OutputSchema) - This is what happens when we resume with a palette
-      else if (result && result.draftHtml) {
-        await updateJobStatus(jobId, "awaiting_style", {
-          currentStep: "awaiting_style",
-          progressMessage: "Colors injected! Select a style to finish.",
-          // Merge the new state back into partials
-          partials: mapContextToProgress({ ...state, ...result }),
-        })
-      }
-      return
-    }
-    // throw error <--- Removing this line
   } catch (error) {
     console.error("Worker Error Trace:", error)
     if (error instanceof Error) {
