@@ -141,29 +141,7 @@ Resources:
         EntryPoints:
           - src/handlers/api/authed.ts
 
-  apiGenerateFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: src/handlers/api/generate.generateHandler
-      Environment:
-        Variables:
 
-          GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
-      Events:
-        Api:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref LambdaHttpApi
-            Path: /api/generate
-            Method: POST
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Minify: true
-        Target: es2022
-        Sourcemap: true
-        EntryPoints:
-          - src/handlers/api/generate.ts
 
   # AUTH ENDPOINTS
 
@@ -434,33 +412,7 @@ Resources:
         EntryPoints:
           - src/handlers/api/generate-choices.ts
 
-  apiGenerateStreamFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: src/handlers/api/generate-stream.generateStreamHandler
-      Environment:
-        Variables:
-          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
-          DDB_ENDPOINT: ""
-          ALLOWED_ORIGINS: !Join [',', !Ref AllowedClientOrigins]
-      Events:
-        Api:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref LambdaHttpApi
-            Path: /api/generate/stream/{jobId}
-            Method: GET
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref GenerationJobsTable
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Minify: true
-        Target: es2022
-        Sourcemap: true
-        EntryPoints:
-          - src/handlers/api/generate-stream.ts
+
 
   apiGenerateWorkerFunction:
     Type: AWS::Serverless::Function
