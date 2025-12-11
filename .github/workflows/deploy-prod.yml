@@ -53,6 +53,6 @@ jobs:
           ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
-          # Encode the credentials to base64 to avoid shell quoting issues
-          export GOOGLE_CREDENTIALS_JSON=$(echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" | base64 -w 0)
+          # Write credentials to file (required by Makefile)
+          echo "$GOOGLE_CREDENTIALS_JSON" > google-credentials.json
           make prod
