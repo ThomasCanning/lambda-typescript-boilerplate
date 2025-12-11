@@ -4,7 +4,7 @@ import { z } from "zod"
 
 export const copywriterAgent = new Agent({
   name: "copywriter-agent",
-  model: vertex("gemini-2.0-flash"),
+  model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
   instructions: `You are a concise marketing copywriter.
 
 Input: LinkedIn profile JSON.

@@ -96,7 +96,9 @@ export async function submitGenerateChoices(
   }
 
   const newStatus: GenerateJobStatus =
-    choices.selectedPaletteId || choices.selectedStyleId ? "running" : "awaiting_choices"
+    choices.selectedPaletteId || choices.selectedStyleId || choices.selectedCopyId
+      ? "running"
+      : "awaiting_choices"
 
   // Prepare cleaned choices for SQS (remove undefineds)
   const cleanedChoices: ChoicesPayload = {}
@@ -158,7 +160,7 @@ export async function submitGenerateChoices(
   )
 
   // Send SQS message logic
-  if (choices.selectedPaletteId || choices.selectedStyleId) {
+  if (choices.selectedPaletteId || choices.selectedStyleId || choices.selectedCopyId) {
     await sqsClient.send(
       new SendMessageCommand({
         QueueUrl: queueUrl,

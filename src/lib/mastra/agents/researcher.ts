@@ -4,7 +4,7 @@ import { linkedInProfileTool } from "../tools/linkedin-profile"
 
 export const researcherAgent = new Agent({
   name: "researcher-agent",
-  model: vertex("gemini-2.0-flash"),
-  instructions: `You are a researcher. You must call the linkedInProfileTool which calls an API to fetch LinkedIn profile data for someone. You are doing this for the purpose of building a personal portfolio website for them. You should strip out any empty, null, or broken values from the data, or anything that you think is completely irrelevant to the person's profile.`,
+  model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
+  instructions: `You are a researcher. Your sole task is to call the linkedInProfileTool to fetch LinkedIn profile data for a given URL and return the results. Do not filter or summarize the data.`,
   tools: { linkedInProfileTool },
 })

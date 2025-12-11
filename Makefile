@@ -37,7 +37,7 @@ GENERATION_QUEUE ?= GenerationQueue
 .PHONY: tf-apply sam-deploy set-admin-password validate-password validate-dns
 .PHONY: deployment-complete generate-outputs
 .PHONY: npm-install ensure-config
-.PHONY: deploy-frontend dev prod
+.PHONY: deploy-frontend dev prod studio
 
 # Shortcut targets for common workflows
 .DEFAULT_GOAL := help
@@ -70,6 +70,11 @@ logs:
 		| grep --line-buffered -v "REPORT RequestId" \
 		| grep --line-buffered -v "Unable to load legacy provider" \
 		| grep --line-buffered -v "Access logging is disabled" || true
+
+# studio: Start the Mastra Studio
+studio:
+	@echo "Starting Mastra Studio..."
+	@NODE_ENV=development npm run dev:mastra
 
 _dev-deploy:
 	@echo "   Stack: $(STACK_NAME)"
@@ -438,8 +443,15 @@ generate-outputs:
 
 .PHONY: deploy-frontend
 deploy-frontend:
-	@echo "Building frontend..."
-	@cd frontend && npm install && npm run build
+	@echo "Fetching API URL from Terraform..."
+	@eval $$(aws configure export-credentials --profile default --format env 2>/dev/null) || true; \
+	API_URL=$$(cd $(TF_DIR) && terraform output -raw base_url); \
+	if [ -z "$$API_URL" ]; then \
+	  echo "❌ Error: Could not retrieve base_url from Terraform outputs."; \
+	  exit 1; \
+	fi; \
+	echo "Building frontend with VITE_API_URL=$$API_URL"; \
+	cd frontend && npm install && VITE_API_URL="$$API_URL" npm run build
 	@# Deploy frontend files to S3 bucket
 	@if ! eval $$(aws configure export-credentials --profile default --format env) || ! terraform -chdir=$(TF_DIR) state list 2>/dev/null | grep -q 'aws_s3_bucket.web_client'; then \
 	  echo "S3 bucket not found. Skipping frontend deployment. Run 'make prod' again after infrastructure is created."; \

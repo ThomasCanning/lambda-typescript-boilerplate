@@ -1,58 +1,43 @@
 process.env.GOOGLE_CREDENTIALS_JSON = "{}"
+process.env.GOOGLE_VERTEX_PROJECT = "test-project"
+process.env.GOOGLE_VERTEX_LOCATION = "us-central1"
+
 import { generateWorkerHandler } from "../../../src/handlers/queue/generate-worker"
 import { SQSEvent } from "aws-lambda/trigger/sqs"
 
-jest.mock("../../../src/lib/mastra/workflows/website-builder", () => ({
-  websiteBuilderWorkflow: {
-    __registerMastra: jest.fn(),
-    __registerPrimitives: jest.fn(),
-    createRunAsync: jest.fn().mockResolvedValue({
-      start: jest.fn().mockResolvedValue({
-        status: "suspended",
-        context: {
-          profileData: { name: "Test" },
-          colorOptions: { options: [{ id: "palette-1" }] },
-          copyOptions: { options: [{ id: "copy-1" }] },
-        },
-      }),
-      resume: jest.fn().mockResolvedValue({
-        status: "success",
-        context: {},
-      }),
-    }),
-  },
-  selectionStep: {
-    execute: jest.fn().mockImplementation(async ({ resumeData, state }) => {
-      // Simulate resume logic
-      if (resumeData?.selectedPaletteId && resumeData?.selectedCopyId) {
+// Mock Mastra instance and agents
+const mockResearcherGenerate = jest.fn()
+const mockSeniorGenerate = jest.fn()
+const mockDesignWorkflowStart = jest.fn()
+const mockDesignWorkflowCreateRun = jest.fn()
+
+jest.mock("../../../src/lib/mastra", () => ({
+  mastra: {
+    getAgent: jest.fn((name) => {
+      if (name === "researcherAgent") {
         return {
-          status: "success",
-          selectedPaletteId: resumeData.selectedPaletteId,
-          selectedCopyId: resumeData.selectedCopyId,
-          colorOptions: state.colorOptions || { options: [{ id: "palette-1" }] },
-          copyOptions: state.copyOptions || { options: [{ id: "copy-1" }] },
+          generate: mockResearcherGenerate,
         }
       }
-      return {
-        status: "suspended",
-        data: {
-          colorOptions: state.colorOptions || { options: [{ id: "palette-1" }] },
-          copyOptions: state.copyOptions || { options: [{ id: "copy-1" }] },
-        },
-        suspendPayload: {
-          colorOptions: state.colorOptions || { options: [{ id: "palette-1" }] },
-          copyOptions: state.copyOptions || { options: [{ id: "copy-1" }] },
-        },
+      if (name === "seniorBuilderAgent") {
+        return {
+          generate: mockSeniorGenerate,
+        }
       }
+      return undefined
     }),
-  },
-  seniorStep: {
-    execute: jest.fn().mockResolvedValue({
-      html: "<html>final</html>",
+    getWorkflow: jest.fn((name) => {
+      if (name === "designWorkflow") {
+        return {
+          createRunAsync: mockDesignWorkflowCreateRun,
+        }
+      }
+      return undefined
     }),
   },
 }))
 
+// Mock DynamoDB
 jest.mock("@aws-sdk/lib-dynamodb", () => {
   class GetCommand {
     constructor(public input: unknown) {}
@@ -72,9 +57,7 @@ jest.mock("@aws-sdk/lib-dynamodb", () => {
 
 jest.mock("@aws-sdk/client-dynamodb", () => ({
   DynamoDBClient: function DynamoDBClient() {},
-  DescribeTableCommand: class {},
 }))
-
 jest.mock("@aws-sdk/client-sqs", () => ({
   SQSClient: function SQSClient() {},
 }))
@@ -110,12 +93,27 @@ describe("HITL flow", () => {
     jest.clearAllMocks()
     process.env.GENERATION_JOBS_TABLE = "table"
     process.env.GENERATION_QUEUE_URL = "queue"
+
+    // Default mock implementations
+    mockResearcherGenerate.mockResolvedValue({
+      object: { name: "Test User", about: "Bio" },
+    })
+
+    mockDesignWorkflowCreateRun.mockResolvedValue({
+      start: mockDesignWorkflowStart,
+    })
+
+    mockDesignWorkflowStart.mockResolvedValue({
+      status: "success",
+    })
+
+    mockSeniorGenerate.mockResolvedValue({
+      object: { index_html: "<html>Final</html>" },
+    })
   })
 
-  it("goes to awaiting_choices after initial run", async () => {
-    sendMock.mockImplementationOnce(async () => ({})) // initial GetCommand check
-    sendMock.mockImplementationOnce(async () => ({})) // status running
-    sendMock.mockImplementationOnce(async () => ({})) // awaiting choices update
+  it("Phase 1: runs researcher + design workflow -> awaiting_choices", async () => {
+    sendMock.mockResolvedValue({}) // dynamo updates
 
     await generateWorkerHandler(
       buildSQSEvent({
@@ -124,32 +122,67 @@ describe("HITL flow", () => {
       })
     )
 
+    // Check Researcher
+    expect(mockResearcherGenerate).toHaveBeenCalled()
+    expect(mockResearcherGenerate.mock.calls[0][0]).toContain("https://linkedin.com/in/test")
+
+    // Check Design Workflow
+    expect(mockDesignWorkflowCreateRun).toHaveBeenCalled()
+    expect(mockDesignWorkflowStart).toHaveBeenCalledWith({
+      inputData: {
+        profileData: { name: "Test User", about: "Bio" },
+        jobId: "job-1",
+      },
+    })
+
+    // Check DynamoDB status updates
+    // We expect: running (scraping) -> running (designing) -> awaiting_choices
     const updates = sendMock.mock.calls
       .map((call) => call[0])
       .filter((cmd) => cmd.constructor.name === "UpdateCommand")
-    expect(updates).toHaveLength(3)
-    const awaiting = updates[2].input as { ExpressionAttributeValues: Record<string, unknown> }
-    expect(awaiting.ExpressionAttributeValues[":status"]).toBe("awaiting_choices")
-    const partials = awaiting.ExpressionAttributeValues[":partials"] as Record<string, unknown>
-    expect(partials.colorOptions).toBeDefined()
-    expect(partials.copyOptions).toBeDefined()
+
+    const awaiting = updates.find(
+      (cmd) => cmd.input.ExpressionAttributeValues[":status"] === "awaiting_choices"
+    )
+    expect(awaiting).toBeDefined()
   })
 
-  it("finalizes after both choices are made", async () => {
+  it("Phase 2: resumes with choices -> senior agent -> succeeded", async () => {
+    // Mock initial GetCommand to return job data
     sendMock.mockImplementationOnce(async () => ({
       Item: {
         status: "awaiting_choices",
         partials: {
           profileData: { name: "Test" },
-          colorOptions: { options: [{ id: "palette-1" }] },
-          copyOptions: { options: [{ id: "copy-1" }] },
+          colorOptions: {
+            options: [
+              {
+                id: "palette-1",
+                label: "Azure",
+                primary: "#123456",
+                secondary: "#654321",
+                background: "#FFFFFF",
+                text: "#000000",
+                accent: "#ABCDEF",
+              },
+            ],
+          },
+          copyOptions: {
+            options: [
+              {
+                id: "copy-1",
+                label: "Storyteller",
+                headline: "My Headline",
+                bio: "My Bio",
+              },
+            ],
+          },
         },
         choices: {},
-        mastraRunId: "run-1",
       },
-    })) // initial job fetch
-    sendMock.mockImplementationOnce(async () => ({})) // running update
-    sendMock.mockImplementation(() => ({})) // subsequent updates
+    }))
+    // Subsequent updates
+    sendMock.mockResolvedValue({})
 
     await generateWorkerHandler(
       buildSQSEvent({
@@ -159,18 +192,22 @@ describe("HITL flow", () => {
       })
     )
 
-    const successUpdate = sendMock.mock.calls
-      .map((c) => c[0])
-      .find(
-        (cmd) =>
-          cmd.constructor.name === "UpdateCommand" &&
-          (cmd.input as { ExpressionAttributeValues: Record<string, unknown> })
-            .ExpressionAttributeValues[":status"] === "succeeded"
-      )
-    expect(successUpdate).toBeDefined()
-    const resultVal = (
-      successUpdate as { input: { ExpressionAttributeValues: Record<string, unknown> } }
-    ).input.ExpressionAttributeValues[":result"] as { text: string }
-    expect(resultVal.text).toContain("final")
+    // Check Senior Agent
+    expect(mockSeniorGenerate).toHaveBeenCalled()
+    const seniorInput = JSON.parse(mockSeniorGenerate.mock.calls[0][0])
+    expect(seniorInput.colorPalette.id).toBe("palette-1")
+    expect(seniorInput.copy.id).toBe("copy-1")
+
+    // Check DynamoDB success update
+    const updates = sendMock.mock.calls
+      .map((call) => call[0])
+      .filter((cmd) => cmd.constructor.name === "UpdateCommand")
+
+    const success = updates.find(
+      (cmd) => cmd.input.ExpressionAttributeValues[":status"] === "succeeded"
+    )
+    expect(success).toBeDefined()
+    const result = success.input.ExpressionAttributeValues[":result"]
+    expect(result.text).toBe("Website generated successfully")
   })
 })

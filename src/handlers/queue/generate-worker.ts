@@ -1,21 +1,21 @@
 import { SQSRecord } from "aws-lambda/trigger/sqs"
 import { DynamoDBClient, DynamoDBClientConfig } from "@aws-sdk/client-dynamodb"
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb"
 import { mastra } from "../../lib/mastra"
-import { updateJobStatus } from "../../lib/api/generate-status"
+import { updateJobStatus, updateJobAgentState } from "../../lib/api/generate-status"
+import { linkedInProfileSchema } from "../../lib/mastra/tools/linkedin-profile"
+import { finalBuildSchema } from "../../lib/mastra/agents/seniorBuilder"
+import { colorOptionsSchema } from "../../lib/mastra/agents/color"
+import { copyOptionsSchema } from "../../lib/mastra/agents/copywriter"
 
 interface QueueMessage {
   jobId?: string
-  prompt?: string
+  prompt?: string // URL
+  // Choice fields
   selectedPaletteId?: string
   selectedCopyId?: string
 }
 
-interface WorkflowResult {
-  status: "success" | "suspended" | "failed"
-  error?: string | Error
-  context?: Record<string, unknown>
-}
 function getEnvVar(name: string): string {
   const value = process.env[name]
   if (!value) throw new Error(`Missing required environment variable: ${name}`)
@@ -39,123 +39,137 @@ async function processRecord(record: SQSRecord): Promise<void> {
   const tableName = getEnvVar("GENERATION_JOBS_TABLE")
 
   try {
+    // Check if this is a "Choice Submission" or "New Job"
     const isResume = Boolean(message.selectedPaletteId || message.selectedCopyId)
-    const workflow = mastra.getWorkflow("websiteBuilderWorkflow")
-    if (!workflow) throw new Error("Workflow not found")
 
-    // --- START NEW JOB ---
     if (!isResume) {
+      // --- PHASE 1: START NEW JOB (Scrape + Junior Agents) ---
+      if (!prompt) throw new Error("URL is required for new job")
+
       await updateJobStatus(jobId, "running", {
-        currentStep: "starting",
-        progressMessage: "Starting AI Workflow...",
+        currentStep: "scraping",
+        progressMessage: "Researcher Agent starting...",
       })
 
-      // Create new run
-      const run = await workflow.createRunAsync()
-
-      // Save runId to DB so we can resume later
-      await dynamoClient.send(
-        new UpdateCommand({
-          TableName: tableName,
-          Key: { jobId },
-          UpdateExpression: "SET mastraRunId = :runId",
-          ExpressionAttributeValues: { ":runId": run.runId },
-        })
+      // 1. Run Researcher Agent (Direct Call)
+      console.log(`[Job ${jobId}] Starting Researcher Agent...`)
+      const researcher = mastra.getAgent("researcherAgent")
+      const scrapeResult = await researcher.generate(
+        `Fetch the LinkedIn profile data for this URL: ${prompt}`,
+        {
+          output: linkedInProfileSchema,
+        }
       )
 
-      // Start the run
-      const result = await run.start({ inputData: { url: prompt!, jobId } })
+      const profileData = scrapeResult.object
+      // Sanitize date for DB (no undefineds)
+      const cleanProfileData = JSON.parse(JSON.stringify(profileData))
 
-      handleWorkflowResult(jobId, result)
-      return
-    }
+      await updateJobStatus(jobId, "running", {
+        currentStep: "designing",
+        progressMessage: "Profile data fetched! Starting design agents...",
+        partials: { profileData: cleanProfileData },
+        agentStates: { color: "idle", copy: "idle" },
+      })
 
-    // --- RESUME JOB ---
-    // 1. Get mastraRunId
-    const job = await dynamoClient.send(new GetCommand({ TableName: tableName, Key: { jobId } }))
-    const mastraRunId = job.Item?.mastraRunId
+      // 2. Run Design Workflow (Junior Agents Parallel)
+      console.log(`[Job ${jobId}] Starting Design Workflow...`)
+      const designWorkflow = mastra.getWorkflow("designWorkflow")
+      if (!designWorkflow) throw new Error("Design Workflow not found")
 
-    if (!mastraRunId) {
-      throw new Error(`Cannot resume job ${jobId}: Missing mastraRunId`)
-    }
+      // Execute Workflow (without suspend, it runs to completion now)
+      const run = await designWorkflow.createRunAsync()
+      const workflowResult = await run.start({
+        inputData: { profileData: cleanProfileData, jobId },
+      })
 
-    const run = await workflow.createRunAsync({ runId: mastraRunId })
+      // Workflow returns { "generate-color-step": { colorOptions }, "generate-copy-step": { copyOptions } }
+      // The workflow steps themselves already call updateJobPartial to save their specific options.
+      // But we should verify or update the final status.
 
-    // 3. Determine which step to resume
-    let stepId = ""
-    let resumePayload = {}
+      console.log(`[Job ${jobId}] Design Workflow completed.`)
 
-    if (message.selectedPaletteId) {
-      stepId = "generate-color-step"
-      resumePayload = { selectedPaletteId: message.selectedPaletteId }
-    } else if (message.selectedCopyId) {
-      stepId = "generate-copy-step"
-      resumePayload = { selectedCopyId: message.selectedCopyId }
+      // We explicitly set status to awaiting_choices if successful
+      if (workflowResult.status === "success") {
+        await updateJobStatus(jobId, "awaiting_choices", {
+          currentStep: "awaiting_choices",
+          progressMessage: "Please select your options.",
+        })
+      } else {
+        throw new Error(`Design workflow failed: ${workflowResult.status}`)
+      }
     } else {
-      throw new Error("Resume triggered without valid selection")
+      // --- PHASE 2: FINISH JOB (Senior Agent) ---
+      console.log(`[Job ${jobId}] Resuming for final build...`)
+
+      // 1. Fetch Job Data (Partials)
+      const jobRecord = await dynamoClient.send(
+        new GetCommand({ TableName: tableName, Key: { jobId } })
+      )
+      const partials = jobRecord.Item?.partials || {}
+
+      const profileData = partials.profileData
+      const colorOptions = partials.colorOptions
+      const copyOptions = partials.copyOptions
+
+      if (!profileData || !colorOptions || !copyOptions) {
+        throw new Error("Missing required partial data (profile, color, or copy) to proceed.")
+      }
+
+      // 2. Resolve Selections
+      const selectedPaletteId =
+        message.selectedPaletteId || jobRecord.Item?.choices?.selectedPaletteId
+      const selectedCopyId = message.selectedCopyId || jobRecord.Item?.choices?.selectedCopyId
+
+      const parsedColor = colorOptionsSchema.safeParse(colorOptions)
+      const parsedCopy = copyOptionsSchema.safeParse(copyOptions)
+
+      if (!parsedColor.success || !parsedCopy.success) {
+        throw new Error("Invalid options data in DB")
+      }
+
+      const selectedPalette = parsedColor.data.options.find((o) => o.id === selectedPaletteId)
+      const selectedCopy = parsedCopy.data.options.find((o) => o.id === selectedCopyId)
+
+      if (!selectedPalette || !selectedCopy) {
+        throw new Error(`Invalid selection IDs: ${selectedPaletteId}, ${selectedCopyId}`)
+      }
+
+      await updateJobStatus(jobId, "running", {
+        currentStep: "building",
+        progressMessage: "Finalizing website with Senior Agent...",
+      })
+      await updateJobAgentState(jobId, "senior", "thinking")
+
+      // 3. Call Senior Agent
+      console.log(`[Job ${jobId}] Calling Senior Agent...`)
+      const seniorAgent = mastra.getAgent("seniorBuilderAgent")
+      const buildResult = await seniorAgent.generate(
+        JSON.stringify({
+          profileData,
+          colorPalette: selectedPalette,
+          copy: selectedCopy,
+        }),
+        { output: finalBuildSchema }
+      )
+
+      const finalHtml = buildResult.object.index_html
+
+      // 4. Complete Job
+      await updateJobStatus(jobId, "succeeded", {
+        partials: { finalHtml },
+        result: { text: "Website generated successfully" },
+        progressMessage: "Website created!",
+      })
+      await updateJobAgentState(jobId, "senior", "completed")
+      console.log(`[Job ${jobId}] Job Succeeded!`)
     }
-
-    const result = await run.resume({
-      step: stepId,
-      resumeData: resumePayload,
-    })
-
-    handleWorkflowResult(jobId, result)
   } catch (error) {
-    console.error("Worker Error Trace:", error)
+    console.error(`[Job ${jobId}] Worker Error:`, error)
     await updateJobStatus(jobId, "failed", {
       error: error instanceof Error ? error.message : "Unknown Error",
     })
     throw error
-  }
-}
-
-async function handleWorkflowResult(jobId: string, result: WorkflowResult) {
-  switch (result.status) {
-    case "suspended": {
-      // Extract options from context if available (handling mocked flat structure and real nested structure)
-      const context = result.context || {}
-
-      // Try to find options in step specific outputs (real Mastra structure) or flat (test mock)
-      const colorOptions =
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (context["generate-color-step"] as any)?.output?.colorOptions ||
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (context as any).colorOptions
-
-      const copyOptions =
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (context["generate-copy-step"] as any)?.output?.copyOptions ||
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (context as any).copyOptions
-
-      await updateJobStatus(jobId, "awaiting_choices", {
-        currentStep: "awaiting_choices",
-        partials: {
-          colorOptions,
-          copyOptions,
-        },
-      })
-      break
-    }
-
-    case "success":
-      await updateJobStatus(jobId, "succeeded", {
-        result: { text: "Website generated successfully (final)" },
-      })
-      break
-
-    case "failed": {
-      // ...
-      const errorMessage =
-        result.error instanceof Error
-          ? result.error.message
-          : String(result.error || "Workflow failed")
-      await updateJobStatus(jobId, "failed", {
-        error: errorMessage,
-      })
-      break
-    }
   }
 }
 

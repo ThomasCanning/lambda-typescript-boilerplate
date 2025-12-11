@@ -1,6 +1,0 @@
-rules:
-  - id: prefer-problem-details
-    description: When adding API handlers, ensure errors are wrapped into problem-details responses (via createProblemDetails) and include CORS/JSON headers.
-  - id: avoid-require
-    description: Avoid require(); use ES module imports.
-
