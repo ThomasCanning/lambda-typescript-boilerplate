@@ -17,6 +17,7 @@ node_modules/
 # Env/secrets
 .env
 env.json
+dev.mk
 
 # Deployment configuration
 dns-records.txt
