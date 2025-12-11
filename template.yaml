@@ -67,7 +67,7 @@ Globals:
         GOOGLE_VERTEX_PROJECT: !Ref GoogleVertexProject
         GOOGLE_VERTEX_LOCATION: !Ref GoogleVertexLocation
         APIFY_API_TOKEN: !Ref ApifyApiToken
-        NODE_OPTIONS: "--enable-source-maps --openssl-legacy-provider"
+        NODE_OPTIONS: "--enable-source-maps"
 
 # Resources declares the AWS resources that you want to include in the stack
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html

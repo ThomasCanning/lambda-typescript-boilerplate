@@ -3,10 +3,11 @@ import { DynamoDBClient, DynamoDBClientConfig } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb"
 import { mastra } from "../../lib/mastra"
 import { updateJobStatus, updateJobAgentState } from "../../lib/api/generate-status"
-import { linkedInProfileSchema } from "../../lib/mastra/tools/linkedin-profile"
+import { fetchLinkedInProfiles } from "../../lib/mastra/tools/linkedin-profile"
 import { finalBuildSchema } from "../../lib/mastra/agents/seniorBuilder"
 import { colorOptionsSchema } from "../../lib/mastra/agents/color"
 import { copyOptionsSchema } from "../../lib/mastra/agents/copywriter"
+import { z } from "zod"
 
 interface QueueMessage {
   jobId?: string
@@ -32,9 +33,15 @@ function createDynamoClient() {
 const dynamoClient = createDynamoClient()
 
 async function processRecord(record: SQSRecord): Promise<void> {
-  const message: QueueMessage = JSON.parse(record.body ?? "{}")
+  if (!record.body) return
+  const message: QueueMessage = JSON.parse(record.body)
   const { jobId, prompt } = message
   if (!jobId) return
+
+  // Concise log
+  console.log(
+    `[Job ${jobId}] Processing. Prompt=${!!prompt}, Palette=${message.selectedPaletteId}, Copy=${message.selectedCopyId}`
+  )
 
   const tableName = getEnvVar("GENERATION_JOBS_TABLE")
 
@@ -48,20 +55,23 @@ async function processRecord(record: SQSRecord): Promise<void> {
 
       await updateJobStatus(jobId, "running", {
         currentStep: "scraping",
-        progressMessage: "Researcher Agent starting...",
+        progressMessage: "Fetching LinkedIn profile...",
       })
 
-      // 1. Run Researcher Agent (Direct Call)
-      console.log(`[Job ${jobId}] Starting Researcher Agent...`)
-      const researcher = mastra.getAgent("researcherAgent")
-      const scrapeResult = await researcher.generate(
-        `Fetch the LinkedIn profile data for this URL: ${prompt}`,
-        {
-          output: linkedInProfileSchema,
-        }
-      )
+      // 1. Fetch Profile Data (Direct Call)
+      console.log(`[Job ${jobId}] Fetching LinkedIn Profile for: ${prompt}`)
+      const scrapeResult = await fetchLinkedInProfiles([prompt])
+      console.log(`[Job ${jobId}] Fetch finished.`)
 
-      const profileData = scrapeResult.object
+      if (scrapeResult.error) {
+        throw new Error(`LinkedIn tool error: ${scrapeResult.error}`)
+      }
+
+      if (!scrapeResult.profiles || scrapeResult.profiles.length === 0) {
+        throw new Error("No LinkedIn profiles found for the given URL.")
+      }
+
+      const profileData = scrapeResult.profiles[0]
       // Sanitize date for DB (no undefineds)
       const cleanProfileData = JSON.parse(JSON.stringify(profileData))
 
@@ -73,34 +83,28 @@ async function processRecord(record: SQSRecord): Promise<void> {
       })
 
       // 2. Run Design Workflow (Junior Agents Parallel)
-      console.log(`[Job ${jobId}] Starting Design Workflow...`)
       const designWorkflow = mastra.getWorkflow("designWorkflow")
       if (!designWorkflow) throw new Error("Design Workflow not found")
 
-      // Execute Workflow (without suspend, it runs to completion now)
+      // Execute Workflow
       const run = await designWorkflow.createRunAsync()
       const workflowResult = await run.start({
         inputData: { profileData: cleanProfileData, jobId },
       })
 
-      // Workflow returns { "generate-color-step": { colorOptions }, "generate-copy-step": { copyOptions } }
-      // The workflow steps themselves already call updateJobPartial to save their specific options.
-      // But we should verify or update the final status.
-
-      console.log(`[Job ${jobId}] Design Workflow completed.`)
-
       // We explicitly set status to awaiting_choices if successful
       if (workflowResult.status === "success") {
+        // Atomic update: only now do we ask for user input
         await updateJobStatus(jobId, "awaiting_choices", {
           currentStep: "awaiting_choices",
           progressMessage: "Please select your options.",
+          agentStates: { color: "waiting_for_user", copy: "waiting_for_user" },
         })
       } else {
         throw new Error(`Design workflow failed: ${workflowResult.status}`)
       }
     } else {
       // --- PHASE 2: FINISH JOB (Senior Agent) ---
-      console.log(`[Job ${jobId}] Resuming for final build...`)
 
       // 1. Fetch Job Data (Partials)
       const jobRecord = await dynamoClient.send(
@@ -118,8 +122,12 @@ async function processRecord(record: SQSRecord): Promise<void> {
 
       // 2. Resolve Selections
       const selectedPaletteId =
-        message.selectedPaletteId || jobRecord.Item?.choices?.selectedPaletteId
-      const selectedCopyId = message.selectedCopyId || jobRecord.Item?.choices?.selectedCopyId
+        message.selectedPaletteId || jobRecord.Item?.choices?.selectedPaletteId || ""
+      const selectedCopyId = message.selectedCopyId || jobRecord.Item?.choices?.selectedCopyId || ""
+
+      console.log(
+        `[Job ${jobId}] Resolved Selections - Palette: ${selectedPaletteId}, Copy: ${selectedCopyId}`
+      )
 
       const parsedColor = colorOptionsSchema.safeParse(colorOptions)
       const parsedCopy = copyOptionsSchema.safeParse(copyOptions)
@@ -128,8 +136,10 @@ async function processRecord(record: SQSRecord): Promise<void> {
         throw new Error("Invalid options data in DB")
       }
 
-      const selectedPalette = parsedColor.data.options.find((o) => o.id === selectedPaletteId)
-      const selectedCopy = parsedCopy.data.options.find((o) => o.id === selectedCopyId)
+      const selectedPalette: z.infer<typeof colorOptionsSchema>["options"][number] | undefined =
+        parsedColor.data.options.find((o) => o.id === selectedPaletteId)
+      const selectedCopy: z.infer<typeof copyOptionsSchema>["options"][number] | undefined =
+        parsedCopy.data.options.find((o) => o.id === selectedCopyId)
 
       if (!selectedPalette || !selectedCopy) {
         throw new Error(`Invalid selection IDs: ${selectedPaletteId}, ${selectedCopyId}`)
@@ -142,16 +152,16 @@ async function processRecord(record: SQSRecord): Promise<void> {
       await updateJobAgentState(jobId, "senior", "thinking")
 
       // 3. Call Senior Agent
-      console.log(`[Job ${jobId}] Calling Senior Agent...`)
       const seniorAgent = mastra.getAgent("seniorBuilderAgent")
       const buildResult = await seniorAgent.generate(
         JSON.stringify({
           profileData,
           colorPalette: selectedPalette,
-          copy: selectedCopy,
+          wordingStyle: selectedCopy,
         }),
         { output: finalBuildSchema }
       )
+      console.log(`[Job ${jobId}] Senior Agent finished.`)
 
       const finalHtml = buildResult.object.index_html
 
@@ -162,7 +172,6 @@ async function processRecord(record: SQSRecord): Promise<void> {
         progressMessage: "Website created!",
       })
       await updateJobAgentState(jobId, "senior", "completed")
-      console.log(`[Job ${jobId}] Job Succeeded!`)
     }
   } catch (error) {
     console.error(`[Job ${jobId}] Worker Error:`, error)

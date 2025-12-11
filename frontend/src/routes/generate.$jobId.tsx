@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { Spinner } from "@/components/ui/spinner"
 import { Button } from "@/components/ui/button"
-import { postGenerateChoices } from "@/lib/api/http/generate"
 import { useGenerate } from "@/lib/api/hooks/use-generate"
 import { CheckCircle2, Palette, PenTool, Hammer, Search } from "lucide-react"
 
@@ -37,11 +36,10 @@ type CopyOptions = {
 
 function GeneratePage() {
   const { jobId } = Route.useParams()
-  const { jobStatus, startPolling, setJobId } = useGenerate()
+  const { jobStatus, startPolling, setJobId, submitPaletteCopy } = useGenerate() // Added submitPaletteCopy to destructure
   const [selectedPaletteId, setSelectedPaletteId] = useState<string | null>(null)
   const [selectedCopyId, setSelectedCopyId] = useState<string | null>(null)
-  const [isSubmittingPalette, setIsSubmittingPalette] = useState(false)
-  const [isSubmittingCopy, setIsSubmittingCopy] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false) // Single submitting state
 
   useEffect(() => {
     if (jobId) {
@@ -114,31 +112,35 @@ function GeneratePage() {
   }
 
   // Handlers
-  const handlePaletteSubmit = async (id: string) => {
-    if (!jobId || isSubmittingPalette || storedChoices.selectedPaletteId) return
-    setIsSubmittingPalette(true)
-    setSelectedPaletteId(id) // Optimistic update
-    try {
-      await postGenerateChoices(jobId, { selectedPaletteId: id })
-    } catch (error) {
-      console.error("Failed to submit palette", error)
-      setSelectedPaletteId(null) // Revert
-    } finally {
-      setIsSubmittingPalette(false)
-    }
+  const handlePaletteSelect = (id: string) => {
+    setSelectedPaletteId(id)
+    // Automatically move to next step? Or just let UI re-render.
+    // Logic below handles "activeCard" strictly.
   }
 
-  const handleCopySubmit = async (id: string) => {
-    if (!jobId || isSubmittingCopy || storedChoices.selectedCopyId) return
-    setIsSubmittingCopy(true)
+  const handleCopySelect = async (id: string) => {
+    // Determine the palette to send
+    const paletteToSend = selectedPaletteId || storedChoices.selectedPaletteId
+
+    if (!paletteToSend) {
+      // Should not happen if flow works, but fail safe
+      console.error("No palette selected")
+      return
+    }
+
+    // Set local state
     setSelectedCopyId(id)
+
+    // Submit BOTH
+    if (!jobId || isSubmitting) return
+    setIsSubmitting(true)
+
     try {
-      await postGenerateChoices(jobId, { selectedCopyId: id })
+      await submitPaletteCopy(paletteToSend, id)
     } catch (error) {
-      console.error("Failed to submit copy", error)
-      setSelectedCopyId(null)
-    } finally {
-      setIsSubmittingCopy(false)
+      console.error("Failed to submit choices", error)
+      setIsSubmitting(false)
+      setSelectedCopyId(null) // Revert if failed
     }
   }
 
@@ -284,7 +286,7 @@ function GeneratePage() {
               {(partials.colorOptions as ColorOptions).options.map((opt) => (
                 <div
                   key={opt.id}
-                  onClick={() => void handlePaletteSubmit(opt.id)}
+                  onClick={() => handlePaletteSelect(opt.id)}
                   className="group p-5 rounded-xl border-2 border-border hover:border-purple-500/50 hover:bg-purple-50/10 cursor-pointer transition-all bg-white shadow-sm hover:shadow-md"
                 >
                   <div className="flex justify-between items-center mb-3">
@@ -319,7 +321,7 @@ function GeneratePage() {
               {(partials.copyOptions as CopyOptions).options.map((opt) => (
                 <div
                   key={opt.id}
-                  onClick={() => void handleCopySubmit(opt.id)}
+                  onClick={() => void handleCopySelect(opt.id)}
                   className="group p-6 rounded-xl border-2 border-border hover:border-green-500/50 hover:bg-green-50/10 cursor-pointer transition-all bg-white shadow-sm hover:shadow-md text-left"
                 >
                   <div className="flex justify-between items-center mb-2">

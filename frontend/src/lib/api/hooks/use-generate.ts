@@ -9,7 +9,7 @@ import {
   type GenerateStatusResponse,
 } from "../http/generate"
 
-const POLL_INTERVAL_MS = 3000
+const POLL_INTERVAL_MS = 1000
 const MAX_POLLS = 120 // ~3 minutes
 
 async function pollForResult(
@@ -98,12 +98,9 @@ export function useGenerate() {
     },
   })
 
-  const submitPaletteCopy = async (choices: {
-    selectedPaletteId: string
-    selectedCopyId: string
-  }) => {
+  const submitPaletteCopy = async (selectedPaletteId: string, selectedCopyId: string) => {
     if (!jobId) throw new Error("No active job")
-    await postGenerateChoices(jobId, choices)
+    await postGenerateChoices(jobId, { selectedPaletteId, selectedCopyId })
     // Polling already running will update status to awaiting_style
   }
 

@@ -6,7 +6,7 @@ import { generateEmptyFromSchema, checkEvalStorageFields } from '@mastra/core/ut
 import { Mastra } from '@mastra/core';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z, ZodObject, ZodFirstPartyTypeKind } from 'zod';
-import { linkedInProfileSchema, linkedInProfileTool } from './tools/66ae78bc-e5b9-4579-9c61-9653c3c19f49.mjs';
+import { linkedInProfileSchema, linkedInProfileTool } from './tools/6aef6dff-61b5-4039-8449-daf15c01aebe.mjs';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback, MessageList, convertMessages } from '@mastra/core/agent';
@@ -274,7 +274,6 @@ const generateColorStep = createStep({
     colorOptions: colorOptionsSchema
   }),
   execute: async ({ mastra, inputData }) => {
-    console.log("Starting generateColorStep", { jobId: inputData.jobId });
     if (inputData.jobId) {
       await updateJobAgentState(inputData.jobId, "color", "thinking");
     }
@@ -282,6 +281,7 @@ const generateColorStep = createStep({
     const result = await agent.generate(JSON.stringify({ profileData: inputData.profileData }), {
       output: colorOptionsSchema
     });
+    console.log("[Color Agent Response]:", JSON.stringify(result.object));
     const colorOptions = JSON.parse(JSON.stringify(result.object));
     if (inputData.jobId) {
       await updateJobPartial(inputData.jobId, "colorOptions", colorOptions);
@@ -300,13 +300,13 @@ const generateCopyStep = createStep({
     copyOptions: copyOptionsSchema
   }),
   execute: async ({ mastra, inputData }) => {
-    console.log("Starting generateCopyStep", { jobId: inputData.jobId });
     if (inputData.jobId) {
       await updateJobAgentState(inputData.jobId, "copy", "thinking");
     }
     const result = await mastra.getAgent("copywriterAgent").generate(JSON.stringify({ profileData: inputData.profileData }), {
       output: copyOptionsSchema
     });
+    console.log("[Copy Agent Response]:", JSON.stringify(result.object));
     const copyOptions = JSON.parse(JSON.stringify(result.object));
     if (inputData.jobId) {
       await updateJobPartial(inputData.jobId, "copyOptions", copyOptions);
@@ -372,10 +372,14 @@ z.object({
 const researcherAgent = new Agent({
   name: "researcher-agent",
   model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
-  instructions: `You are a researcher. Your sole task is to call the linkedInProfileTool to fetch LinkedIn profile data for a given URL and return the results. Do not filter or summarize the data.`,
+  instructions: `You are a researcher agent. Your ONLY job is to call the linkedInProfileTool with the provided LinkedIn URL.
+You MUST output the exact JSON returned by the linkedInProfileTool.
+Do NOT add any commentary, do NOT summarize, do NOT hallucinate information not present in the tool output.
+If the tool returns error or empty, return that exactly.`,
   tools: { linkedInProfileTool }
 });
 
+globalThis.___MASTRA_TELEMETRY___ = true;
 const mastra = new Mastra({
   workflows: {
     designWorkflow

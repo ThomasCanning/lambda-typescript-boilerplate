@@ -4,7 +4,7 @@ import path from "node:path"
 
 let vertexInstance: ReturnType<typeof createVertex> | null = null
 
-function getVertex() {
+function getVertex(): ReturnType<typeof createVertex> {
   if (vertexInstance) {
     return vertexInstance
   }
@@ -73,7 +73,7 @@ function getVertex() {
     },
   })
 
-  return vertexInstance
+  return vertexInstance!
 }
 
 // Export as a function that returns the model provider function

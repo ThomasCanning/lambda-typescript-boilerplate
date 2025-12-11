@@ -1,6 +1,6 @@
 import { SQSClient, SendMessageCommand, SQSClientConfig } from "@aws-sdk/client-sqs"
 import { DynamoDBClient, DynamoDBClientConfig } from "@aws-sdk/client-dynamodb"
-import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from "@aws-sdk/lib-dynamodb"
+import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb"
 import { GenerateJobStatus } from "./generate-status"
 
 interface ChoicesPayload {
@@ -52,103 +52,36 @@ export async function submitGenerateChoices(
   const dynamoClient = createDynamoClient()
   const sqsClient = createSqsClient()
 
-  if (!jobId) {
-    throw new Error("jobId is required")
+  if (!jobId) throw new Error("jobId is required")
+
+  // 1. Strict Validation: Both Palette and Copy are required.
+  const { selectedPaletteId, selectedCopyId } = choices
+  if (!selectedPaletteId || !selectedCopyId) {
+    throw new Error("Both selectedPaletteId and selectedCopyId are required.")
   }
 
-  const existing = await dynamoClient.send(
-    new GetCommand({
-      TableName: tableName,
-      Key: { jobId },
-    })
-  )
+  // 2. Prepare Updates
+  const now = new Date().toISOString()
+  const newStatus: GenerateJobStatus = "running"
 
-  if (!existing.Item) {
-    throw new Error("Job not found")
-  }
+  const updateParts: string[] = [
+    "#status = :status",
+    "#updatedAt = :updatedAt",
+    "choices = :choicesMap",
+  ]
 
-  // Merge existing choices with new choices for validation and status calculation
-  // We still do this in memory to determine WHAT to write and verify correctness
-  const existingChoices = (existing.Item.choices as ChoicesPayload | undefined) || {}
-  const mergedChoices: ChoicesPayload = {
-    ...existingChoices,
-    ...choices,
-  }
-
-  // Validate merged choices
-  if (
-    !mergedChoices.selectedPaletteId &&
-    !mergedChoices.selectedCopyId &&
-    !mergedChoices.selectedStyleId
-  ) {
-    throw new Error("At least one selection is required")
-  }
-
-  // Strict validation for final submission
-  if (choices.selectedStyleId) {
-    if (
-      !mergedChoices.selectedPaletteId ||
-      !mergedChoices.selectedCopyId ||
-      !mergedChoices.selectedStyleId
-    ) {
-      throw new Error("Palette, copy, and style selections are all required for final generation")
-    }
-  }
-
-  const newStatus: GenerateJobStatus =
-    choices.selectedPaletteId || choices.selectedStyleId || choices.selectedCopyId
-      ? "running"
-      : "awaiting_choices"
-
-  // Prepare cleaned choices for SQS (remove undefineds)
-  const cleanedChoices: ChoicesPayload = {}
-  if (mergedChoices.selectedPaletteId)
-    cleanedChoices.selectedPaletteId = mergedChoices.selectedPaletteId
-  if (mergedChoices.selectedCopyId) cleanedChoices.selectedCopyId = mergedChoices.selectedCopyId
-  if (mergedChoices.selectedStyleId) cleanedChoices.selectedStyleId = mergedChoices.selectedStyleId
-
-  // --- ATOMIC DYNAMODB UPDATE ---
-  // We check if 'choices' map exists to handle initialization vs nested updates
-  const hasChoicesMap = !!existing.Item.choices
-
-  if (!hasChoicesMap) {
-    // Initialize map if missing
-    // We can just regular update here since we know it was empty
-    await dynamoClient.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: { jobId },
-        UpdateExpression: "SET choices = if_not_exists(choices, :empty)",
-        ExpressionAttributeValues: { ":empty": {} },
-      })
-    )
-  }
-
-  // Construct atomic update for fields
-  const updateParts: string[] = ["#status = :status", "#updatedAt = :updatedAt"]
   const attributeNames: Record<string, string> = {
     "#status": "status",
     "#updatedAt": "updatedAt",
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const attributeValues: Record<string, any> = {
+
+  const attributeValues: Record<string, string | ChoicesPayload> = {
     ":status": newStatus,
-    ":updatedAt": new Date().toISOString(),
+    ":updatedAt": now,
+    ":choicesMap": { selectedPaletteId, selectedCopyId },
   }
 
-  if (choices.selectedPaletteId) {
-    updateParts.push("choices.selectedPaletteId = :paletteId")
-    attributeValues[":paletteId"] = choices.selectedPaletteId
-  }
-  if (choices.selectedCopyId) {
-    updateParts.push("choices.selectedCopyId = :copyId")
-    attributeValues[":copyId"] = choices.selectedCopyId
-  }
-  if (choices.selectedStyleId) {
-    updateParts.push("choices.selectedStyleId = :styleId")
-    attributeValues[":styleId"] = choices.selectedStyleId
-  }
-
+  // 3. Atomic Write to DynamoDB (Overwrite choices)
   await dynamoClient.send(
     new UpdateCommand({
       TableName: tableName,
@@ -156,23 +89,25 @@ export async function submitGenerateChoices(
       UpdateExpression: `SET ${updateParts.join(", ")}`,
       ExpressionAttributeNames: attributeNames,
       ExpressionAttributeValues: attributeValues,
+      ConditionExpression: "attribute_exists(jobId)", // Ensure job exists
     })
   )
 
-  // Send SQS message logic
-  if (choices.selectedPaletteId || choices.selectedStyleId || choices.selectedCopyId) {
-    await sqsClient.send(
-      new SendMessageCommand({
-        QueueUrl: queueUrl,
-        MessageBody: JSON.stringify({
-          jobId,
-          selectedPaletteId: cleanedChoices.selectedPaletteId,
-          selectedCopyId: cleanedChoices.selectedCopyId,
-          selectedStyleId: cleanedChoices.selectedStyleId,
-        }),
-      })
-    )
-  }
+  // 4. Trigger Worker (Phase 2)
+  console.log(
+    `[Job ${jobId}] Phase 2 Triggered. Choices: Palette=${selectedPaletteId}, Copy=${selectedCopyId}`
+  )
+
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: queueUrl,
+      MessageBody: JSON.stringify({
+        jobId,
+        selectedPaletteId,
+        selectedCopyId,
+      }),
+    })
+  )
 
   return { jobId, status: newStatus }
 }

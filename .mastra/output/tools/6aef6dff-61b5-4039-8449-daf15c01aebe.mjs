@@ -127,7 +127,12 @@ const linkedInProfileTool = createTool({
     profiles: z.array(linkedInProfileSchema),
     error: z.string().nullable()
   }),
-  execute: async ({ context }) => fetchLinkedInProfiles(context.profileUrls)
+  execute: async ({ context }) => {
+    console.log("linkedInProfileTool executing with:", context.profileUrls);
+    const result = await fetchLinkedInProfiles(context.profileUrls);
+    console.log("linkedInProfileTool result:", JSON.stringify(result, null, 2));
+    return result;
+  }
 });
 
 export { fetchLinkedInProfiles, linkedInProfileSchema, linkedInProfileTool };

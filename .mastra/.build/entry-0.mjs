@@ -316,9 +316,7 @@ function getVertex() {
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error(
-      `Credential parsing failed. Input length: ${credentialsJson?.length}`
-    );
+    console.error(`Credential parsing failed. Input length: ${credentialsJson?.length}`);
     console.error(`Input starts with: ${credentialsJson?.substring(0, 5)}...`);
     throw new Error(`Failed to parse Google credentials: ${errorMsg}`);
   }
@@ -337,47 +335,9 @@ function vertex(modelName) {
 }
 
 "use strict";
-const seniorBuilderAgent = new Agent({
-  name: "senior-builder-agent",
-  model: vertex("gemini-3-pro-preview"),
-  instructions: `You are the architect responsible for assembling the final website.
-    
-Your Goal:
-Given the following inputs:
-1. "profileData": Scraped LinkedIn profile data (name, about, experience, etc).
-2. "colorPalette": The specific color palette chosen by the user (primary, secondary, background, text, accent).
-3. "copy": The specific copy version chosen by the user (headline, bio).
-
-You must generate a COMPLETE, production-ready, single-file HTML personal website.
-
-Instructions:
-- Use Semantic HTML5.
-- Use Tailwind CSS via CDN for styling.
-- STYLING IS CRITICAL. You are the Senior Designer. You must decide the layout, spacing, and visual hierarchy yourself.
-- Use the provided "colorPalette" to theme the site. Map the colors to Tailwind arbitrary values (e.g., bg-[#123456]) or style attributes.
-- Use the provided "copy" for the main content (Hero headline, About section).
-- Populate the rest of the site (Experience, Education) using the "profileData".
-- Ensure the site is responsive (mobile-friendly).
-- Do not use placeholder images of random people.
-- CRITICAL: Check "profileData.basic_info.profile_picture_url" for the profile image.
-- IF valid, use it.
-- IF NULL/UNDEFINED: Use a generic SVG placeholder or Initials (e.g., <div>John Doe</div>). DO NOT use an Unsplash photo of a random person.
-
-CRITICAL OUTPUT FORMAT RULES:
-- Return ONLY raw JSON, no markdown code blocks, no backticks, no explanations.
-- Start your response directly with { and end with }
-- The JSON structure must be: {"index_html": "<!DOCTYPE html><html>...</html>"}
-- DO NOT use \`\`\`json or \`\`\` markers.
-- DO NOT include any text before or after the JSON object.`
-});
-const finalBuildSchema = z.object({
-  index_html: z.string()
-});
-
-"use strict";
 const colorAgent = new Agent({
   name: "color-palette-agent",
-  model: vertex("gemini-2.0-flash-lite-preview-02-05"),
+  model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
   instructions: `You are an expert color designer creating personalized color palettes for a PERSONAL PORTFOLIO WEBSITE. This is a personal portfolio site built from a person's LinkedIn profile data - it should reflect their unique professional identity and personality.
 
 ## Your Task
@@ -449,7 +409,7 @@ const colorOptionsSchema = z.object({
 "use strict";
 const copywriterAgent = new Agent({
   name: "copywriter-agent",
-  model: vertex("gemini-2.5-flash-lite-preview-09-2025 "),
+  model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
   instructions: `You are a concise marketing copywriter.
 
 Input: LinkedIn profile JSON.
@@ -473,37 +433,6 @@ const copyOptionsSchema = z.object({
 });
 
 "use strict";
-const startStep = createStep({
-  id: "start-step",
-  inputSchema: z.object({
-    url: z.string(),
-    jobId: z.string().optional()
-  }),
-  outputSchema: z.object({
-    profileData: linkedInProfileSchema,
-    jobId: z.string().optional()
-  }),
-  execute: async ({ inputData, mastra }) => {
-    if (inputData.jobId) {
-      await updateJobStatus(inputData.jobId, "running", {
-        progressMessage: "Researcher Agent starting..."
-      });
-    }
-    const result = await mastra.getAgent("researcherAgent").generate(`Fetch the LinkedIn profile data for this URL: ${inputData.url}`, {
-      output: linkedInProfileSchema
-    });
-    const profileData = result.object;
-    const cleanProfileData = profileData ? JSON.parse(JSON.stringify(profileData)) : {};
-    if (inputData.jobId) {
-      await updateJobStatus(inputData.jobId, "running", {
-        progressMessage: "Profile data fetched and cleaned! Starting design agents...",
-        partials: { profileData: cleanProfileData },
-        agentStates: { color: "idle", copy: "idle" }
-      });
-    }
-    return { profileData: cleanProfileData, jobId: inputData.jobId };
-  }
-});
 const generateColorStep = createStep({
   id: "generate-color-step",
   inputSchema: z.object({
@@ -511,51 +440,23 @@ const generateColorStep = createStep({
     jobId: z.string().optional()
   }),
   outputSchema: z.object({
-    colorOptions: colorOptionsSchema,
-    selectedPaletteId: z.string()
+    colorOptions: colorOptionsSchema
   }),
-  stateSchema: z.object({
-    generatedOptions: colorOptionsSchema.optional()
-  }),
-  resumeSchema: z.object({
-    selectedPaletteId: z.string()
-  }),
-  execute: async ({ mastra, inputData, resumeData, state, setState, suspend }) => {
-    if (resumeData) {
-      console.log("Color Step Resume Debug:", { state, resumeData });
-      if (!state.generatedOptions) {
-        throw new Error("Resumed without generated options in state");
-      }
-      if (inputData.jobId) {
-        await updateJobAgentState(inputData.jobId, "color", "completed");
-      }
-      return {
-        colorOptions: state.generatedOptions,
-        selectedPaletteId: resumeData.selectedPaletteId
-      };
+  execute: async ({ mastra, inputData }) => {
+    if (inputData.jobId) {
+      await updateJobAgentState(inputData.jobId, "color", "thinking");
     }
-    let colorOptions = state.generatedOptions;
-    if (!colorOptions) {
-      if (inputData.jobId) {
-        await updateJobAgentState(inputData.jobId, "color", "thinking");
-      }
-      const agent = mastra.getAgent("colorAgent");
-      const result = await agent.generate(JSON.stringify({ profileData: inputData.profileData }), {
-        output: colorOptionsSchema
-      });
-      colorOptions = JSON.parse(JSON.stringify(result.object));
-      setState({ generatedOptions: colorOptions });
-      if (inputData.jobId) {
-        await updateJobPartial(inputData.jobId, "colorOptions", colorOptions);
-        await updateJobAgentState(inputData.jobId, "color", "waiting_for_user");
-      }
+    const agent = mastra.getAgent("colorAgent");
+    const result = await agent.generate(JSON.stringify({ profileData: inputData.profileData }), {
+      output: colorOptionsSchema
+    });
+    console.log("[Color Agent Response]:", JSON.stringify(result.object));
+    const colorOptions = JSON.parse(JSON.stringify(result.object));
+    if (inputData.jobId) {
+      await updateJobPartial(inputData.jobId, "colorOptions", colorOptions);
+      await updateJobAgentState(inputData.jobId, "color", "waiting_for_user");
     }
-    return suspend(
-      { colorOptions },
-      // suspend payload (informational)
-      { resumeLabel: "Select Color" }
-      // resume config
-    );
+    return { colorOptions };
   }
 });
 const generateCopyStep = createStep({
@@ -565,137 +466,97 @@ const generateCopyStep = createStep({
     jobId: z.string().optional()
   }),
   outputSchema: z.object({
-    copyOptions: copyOptionsSchema,
-    selectedCopyId: z.string()
+    copyOptions: copyOptionsSchema
   }),
-  stateSchema: z.object({
-    generatedOptions: copyOptionsSchema.optional()
-  }),
-  resumeSchema: z.object({
-    selectedCopyId: z.string()
-  }),
-  execute: async ({ mastra, inputData, resumeData, state, setState, suspend }) => {
-    if (resumeData) {
-      console.log("Copy Step Resume Debug:", { state, resumeData });
-      if (!state.generatedOptions) {
-        throw new Error("Resumed without generated options in state");
-      }
-      if (inputData.jobId) {
-        await updateJobAgentState(inputData.jobId, "copy", "completed");
-      }
-      return {
-        copyOptions: state.generatedOptions,
-        selectedCopyId: resumeData.selectedCopyId
-      };
+  execute: async ({ mastra, inputData }) => {
+    if (inputData.jobId) {
+      await updateJobAgentState(inputData.jobId, "copy", "thinking");
     }
-    let copyOptions = state.generatedOptions;
-    if (!copyOptions) {
-      if (inputData.jobId) {
-        await updateJobAgentState(inputData.jobId, "copy", "thinking");
-      }
-      const result = await mastra.getAgent("copywriterAgent").generate(JSON.stringify({ profileData: inputData.profileData }), {
-        output: copyOptionsSchema
-      });
-      copyOptions = JSON.parse(JSON.stringify(result.object));
-      setState({ generatedOptions: copyOptions });
-      if (inputData.jobId) {
-        await updateJobPartial(inputData.jobId, "copyOptions", copyOptions);
-        await updateJobAgentState(inputData.jobId, "copy", "waiting_for_user");
-      }
+    const result = await mastra.getAgent("copywriterAgent").generate(JSON.stringify({ profileData: inputData.profileData }), {
+      output: copyOptionsSchema
+    });
+    console.log("[Copy Agent Response]:", JSON.stringify(result.object));
+    const copyOptions = JSON.parse(JSON.stringify(result.object));
+    if (inputData.jobId) {
+      await updateJobPartial(inputData.jobId, "copyOptions", copyOptions);
+      await updateJobAgentState(inputData.jobId, "copy", "waiting_for_user");
     }
-    return suspend({ copyOptions }, { resumeLabel: "Select Copy" });
+    return { copyOptions };
   }
 });
-const seniorStep = createStep({
-  id: "senior-step",
+const designWorkflow = createWorkflow({
+  id: "design-workflow",
   inputSchema: z.object({
     profileData: linkedInProfileSchema,
-    // direct from startStep
-    // Parallel outputs come in as a map keyed by step ID
+    jobId: z.string().optional()
+  }),
+  outputSchema: z.object({
+    // Parallel step output is a map keyed by step ID
     "generate-color-step": z.object({
-      colorOptions: colorOptionsSchema,
-      selectedPaletteId: z.string()
+      colorOptions: colorOptionsSchema
     }),
     "generate-copy-step": z.object({
-      copyOptions: copyOptionsSchema,
-      selectedCopyId: z.string()
-    }),
-    jobId: z.string().optional()
-  }),
-  outputSchema: z.object({
-    html: z.string()
-  }),
-  execute: async ({ inputData }) => {
-    const colorResult = inputData["generate-color-step"];
-    const copyResult = inputData["generate-copy-step"];
-    const { profileData, jobId } = inputData;
-    const selectedPalette = colorResult.colorOptions.options.find(
-      (o) => o.id === colorResult.selectedPaletteId
-    );
-    const selectedCopy = copyResult.copyOptions.options.find(
-      (o) => o.id === copyResult.selectedCopyId
-    );
-    if (!selectedPalette || !selectedCopy) throw new Error("Invalid selection IDs");
-    if (jobId) {
-      await updateJobStatus(jobId, "running", {
-        agentStates: { senior: "thinking", color: "completed", copy: "completed" },
-        progressMessage: "Finalizing website..."
-      });
-    }
-    const result = await seniorBuilderAgent.generate(
-      JSON.stringify({
-        profileData,
-        colorPalette: selectedPalette,
-        copy: selectedCopy
-      }),
-      { output: finalBuildSchema }
-    );
-    const finalHtml = result.object.index_html;
-    if (jobId) {
-      await updateJobStatus(jobId, "succeeded", {
-        agentStates: { senior: "completed" },
-        partials: {
-          finalHtml,
-          profileData,
-          // ensure complete data is in final record
-          colorOptions: colorResult.colorOptions,
-          copyOptions: copyResult.copyOptions
-        },
-        choices: {
-          selectedPaletteId: colorResult.selectedPaletteId,
-          selectedCopyId: copyResult.selectedCopyId
-        },
-        progressMessage: "Website created!"
-      });
-    }
-    return { html: finalHtml };
-  }
-});
-const websiteBuilderWorkflow = createWorkflow({
-  id: "website-builder-workflow",
-  inputSchema: z.object({
-    url: z.string(),
-    jobId: z.string().optional()
-  }),
-  outputSchema: z.object({
-    html: z.string()
+      copyOptions: copyOptionsSchema
+    })
   })
-}).then(startStep).parallel([generateColorStep, generateCopyStep]).then(seniorStep).commit();
+}).parallel([generateColorStep, generateCopyStep]).commit();
+
+"use strict";
+const seniorBuilderAgent = new Agent({
+  name: "senior-builder-agent",
+  model: vertex("gemini-3-pro-preview"),
+  instructions: `You are the architect responsible for assembling the final website.
+    
+Your Goal:
+Given the following inputs:
+1. "profileData": Scraped LinkedIn profile data (name, about, experience, etc).
+2. "colorPalette": The specific color palette chosen by the user (primary, secondary, background, text, accent).
+3. "copy": The specific copy version chosen by the user (headline, bio).
+
+You must generate a COMPLETE, production-ready, single-file HTML personal website.
+
+Instructions:
+- Use Semantic HTML5.
+- Use Tailwind CSS via CDN for styling.
+- STYLING IS CRITICAL. You are the Senior Designer. You must decide the layout, spacing, and visual hierarchy yourself.
+- Use the provided "colorPalette" to theme the site. Map the colors to Tailwind arbitrary values (e.g., bg-[#123456]) or style attributes.
+- Use the provided "copy" for the main content (Hero headline, About section).
+- Populate the rest of the site (Experience, Education) using the "profileData".
+- Ensure the site is responsive (mobile-friendly).
+- Do not use placeholder images of random people.
+- CRITICAL: Check "profileData.basic_info.profile_picture_url" for the profile image.
+- IF valid, use it.
+- IF NULL/UNDEFINED: Use a generic SVG placeholder or Initials (e.g., <div>John Doe</div>). DO NOT use an Unsplash photo of a random person.
+
+CRITICAL OUTPUT FORMAT RULES:
+- Return ONLY raw JSON, no markdown code blocks, no backticks, no explanations.
+- Start your response directly with { and end with }
+- The JSON structure must be: {"index_html": "<!DOCTYPE html><html>...</html>"}
+- DO NOT use \`\`\`json or \`\`\` markers.
+- DO NOT include any text before or after the JSON object.`
+});
+const finalBuildSchema = z.object({
+  index_html: z.string()
+});
 
 "use strict";
 const researcherAgent = new Agent({
   name: "researcher-agent",
   model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
-  instructions: `You are a researcher. Your sole task is to call the linkedInProfileTool to fetch LinkedIn profile data for a given URL and return the results. Do not filter or summarize the data.`,
+  instructions: `You are a researcher agent. Your ONLY job is to call the linkedInProfileTool with the provided LinkedIn URL.
+You MUST output the exact JSON returned by the linkedInProfileTool.
+Do NOT add any commentary, do NOT summarize, do NOT hallucinate information not present in the tool output.
+If the tool returns error or empty, return that exactly.`,
   tools: { linkedInProfileTool }
 });
 
 "use strict";
 const tableName = process.env.MASTRA_TABLE_NAME || "MastraStore";
 const region = process.env.AWS_REGION || "us-east-1";
+globalThis.___MASTRA_TELEMETRY___ = true;
 const mastra = new Mastra({
   workflows: {
-    websiteBuilderWorkflow
+    designWorkflow
   },
   storage: process.env.NODE_ENV === "development" ? new MockStore() : new DynamoDBStore({
     name: "dynamodb",

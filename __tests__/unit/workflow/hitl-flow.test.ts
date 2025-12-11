@@ -14,11 +14,6 @@ const mockDesignWorkflowCreateRun = jest.fn()
 jest.mock("../../../src/lib/mastra", () => ({
   mastra: {
     getAgent: jest.fn((name) => {
-      if (name === "researcherAgent") {
-        return {
-          generate: mockResearcherGenerate,
-        }
-      }
       if (name === "seniorBuilderAgent") {
         return {
           generate: mockSeniorGenerate,
@@ -62,6 +57,16 @@ jest.mock("@aws-sdk/client-sqs", () => ({
   SQSClient: function SQSClient() {},
 }))
 
+// Mock LinkedIn Tool
+jest.mock("../../../src/lib/mastra/tools/linkedin-profile", () => ({
+  fetchLinkedInProfiles: jest.fn().mockResolvedValue({
+    profiles: [{ name: "Test User", about: "Bio" }],
+    error: null,
+  }),
+  // Maintain other exports if needed (though only fetchLinkedInProfiles is used in worker now)
+  linkedInProfileSchema: {},
+}))
+
 const sendMock = jest.requireMock("@aws-sdk/lib-dynamodb").__sendMock as jest.Mock
 
 const buildSQSEvent = (body: Record<string, unknown>): SQSEvent => ({
@@ -96,7 +101,9 @@ describe("HITL flow", () => {
 
     // Default mock implementations
     mockResearcherGenerate.mockResolvedValue({
-      object: { name: "Test User", about: "Bio" },
+      object: {
+        profiles: [{ name: "Test User", about: "Bio" }],
+      },
     })
 
     mockDesignWorkflowCreateRun.mockResolvedValue({
@@ -122,15 +129,11 @@ describe("HITL flow", () => {
       })
     )
 
-    // Check Researcher
-    expect(mockResearcherGenerate).toHaveBeenCalled()
-    expect(mockResearcherGenerate.mock.calls[0][0]).toContain("https://linkedin.com/in/test")
-
     // Check Design Workflow
     expect(mockDesignWorkflowCreateRun).toHaveBeenCalled()
     expect(mockDesignWorkflowStart).toHaveBeenCalledWith({
       inputData: {
-        profileData: { name: "Test User", about: "Bio" },
+        profileData: expect.objectContaining({ name: "Test User", about: "Bio" }),
         jobId: "job-1",
       },
     })
@@ -196,7 +199,7 @@ describe("HITL flow", () => {
     expect(mockSeniorGenerate).toHaveBeenCalled()
     const seniorInput = JSON.parse(mockSeniorGenerate.mock.calls[0][0])
     expect(seniorInput.colorPalette.id).toBe("palette-1")
-    expect(seniorInput.copy.id).toBe("copy-1")
+    expect(seniorInput.wordingStyle.id).toBe("copy-1")
 
     // Check DynamoDB success update
     const updates = sendMock.mock.calls

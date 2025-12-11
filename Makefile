@@ -60,16 +60,6 @@ dev:
 	fi
 	@$(MAKE) _dev-deploy STAGE=dev
 
-# logs: Stream logs from all functions in the stack
-logs:
-	@echo "🔍 Streaming logs for stack: $(STACK_NAME)..."
-	@AWS_REGION=$(REGION) sam logs --stack-name $(STACK_NAME) --tail \
-		| grep --line-buffered -v "INIT_START" \
-		| grep --line-buffered -v "START RequestId" \
-		| grep --line-buffered -v "END RequestId" \
-		| grep --line-buffered -v "REPORT RequestId" \
-		| grep --line-buffered -v "Unable to load legacy provider" \
-		| grep --line-buffered -v "Access logging is disabled" || true
 
 # studio: Start the Mastra Studio
 studio:

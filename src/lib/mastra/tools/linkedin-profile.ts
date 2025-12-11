@@ -113,7 +113,10 @@ export async function fetchLinkedInProfiles(profileUrls: string[]) {
         includeEmail: false,
       }
 
-      const run = await client.actor("VhxlqQXRwhW8H5hNV").call(input)
+      const run = await client.actor("VhxlqQXRwhW8H5hNV").call(input, {
+        timeout: 60, // 60 seconds timeout
+        memory: 256,
+      })
       const { items } = await client.dataset(run.defaultDatasetId).listItems()
 
       for (const item of items) {
@@ -150,5 +153,15 @@ export const linkedInProfileTool = createTool({
     profiles: z.array(linkedInProfileSchema),
     error: z.string().nullable(),
   }),
-  execute: async ({ context }) => fetchLinkedInProfiles(context.profileUrls),
+  execute: async ({ context }) => {
+    console.log("linkedInProfileTool executing with:", context.profileUrls)
+    const result = await fetchLinkedInProfiles(context.profileUrls)
+    console.log("linkedInProfileTool result:", JSON.stringify(result, null, 2))
+    return result
+  },
+})
+
+export const linkedInProfileToolOutputSchema = z.object({
+  profiles: z.array(linkedInProfileSchema),
+  error: z.string().nullable(),
 })

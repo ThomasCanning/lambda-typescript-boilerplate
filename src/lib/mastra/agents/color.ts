@@ -4,8 +4,10 @@ import { z } from "zod"
 
 export const colorAgent = new Agent({
   name: "color-palette-agent",
-  model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
+  model: vertex("gemini-3-pro-preview"),
   instructions: `You are an expert color designer creating personalized color palettes for a PERSONAL PORTFOLIO WEBSITE. This is a personal portfolio site built from a person's LinkedIn profile data - it should reflect their unique professional identity and personality.
+
+Input: LinkedIn Profile JSON. USE THIS DATA to inform your choices.
 
 ## Your Task
 Create SIX distinct, visually cohesive color palettes for this personal portfolio website. Each palette must include: primary, secondary, background, text, and accent colors (all as hex codes).
@@ -13,20 +15,16 @@ Create SIX distinct, visually cohesive color palettes for this personal portfoli
 ## Required Palettes
 You MUST include these three palettes, then create 3 additional diverse palettes:
 
-1. **Corporate/Professional**: Inspired by LinkedIn's blue palette (#0077B5, #0A66C2) - professional and trustworthy. Label based on the exact blue shade: "Professional", "Azure", "Corporate", "Navy", etc.
+1. **Professional**: A clean, trustworthy blue-based palette (e.g., Azure, Navy).
+2. **Industry**:  Extract colors from the user's company logos or industry themes (e.g., "Tech" -> Teal, "Finance" -> Slate).
+3. **Minimalist**: A simple, high-contrast palette (e.g., Mono, Stone).
 
-2. **Industry-Inspired**: Based on the person's industry, role, and company logos. Extract colors from company_logo_url fields. Label should reflect both industry and color (e.g., "Tech", "Finance", or specific color names like "Coral", "Emerald").
+4-6. **Personalized**: Create 3 unique palettes based on their profile picture, background image, or personality traits inferred from the bio.
 
-3. **Minimalist**: A minimalist palette with a focus on simplicity and minimalism. Label should reflect the minimalist aesthetic.
-
-3-6. **Three Additional Palettes**: Create diverse options inspired by:
-   - Colors from profile_picture_url and background_picture_url
-   - Personality indicators from their profile
-   - Demographic considerations (age, gender if apparent)
-   - Different aesthetic styles (minimal, dark mode, pastel, warm, etc.)
-   - Ensure these palettes would actually go well on a personal portfolio website
-
-Use these actual extracted colors as the foundation for your palettes - do not make up generic colors.
+## Extraction Rules
+- LOOK at valid image URLs in the JSON if possible (profile/background/company).
+- Infer style from their role (Designer -> Bold; Accountant -> Conservative).
+- Do not default to generic templates if specific data exists.
 
 ## Palette Naming Rules
 **CRITICAL: Labels must describe the ACTUAL COLORS, not generic terms, prefer 1 word but 2 is also fine.**

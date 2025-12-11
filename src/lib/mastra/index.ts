@@ -4,12 +4,15 @@ import { designWorkflow } from "./workflows/website-builder"
 import { colorAgent } from "./agents/color"
 import { copywriterAgent } from "./agents/copywriter"
 import { seniorBuilderAgent } from "./agents/seniorBuilder"
-import { researcherAgent } from "./agents/researcher"
 
 import { MockStore } from "@mastra/core/storage"
 
 const tableName = process.env.MASTRA_TABLE_NAME || "MastraStore"
 const region = process.env.AWS_REGION || "us-east-1"
+
+// Silence Mastra telemetry warnings
+// @ts-expect-error - internal flag to disable telemetry
+globalThis.___MASTRA_TELEMETRY___ = true
 
 export const mastra = new Mastra({
   workflows: { designWorkflow },
@@ -26,5 +29,5 @@ export const mastra = new Mastra({
           },
         }),
   // Add your agents here
-  agents: { colorAgent, copywriterAgent, seniorBuilderAgent, researcherAgent },
+  agents: { colorAgent, copywriterAgent, seniorBuilderAgent },
 })

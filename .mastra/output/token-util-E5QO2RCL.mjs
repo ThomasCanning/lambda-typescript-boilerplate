@@ -8,7 +8,7 @@ import '@mastra/core/utils';
 import '@mastra/core';
 import '@mastra/core/workflows';
 import 'zod';
-import './tools/66ae78bc-e5b9-4579-9c61-9653c3c19f49.mjs';
+import './tools/6aef6dff-61b5-4039-8449-daf15c01aebe.mjs';
 import '@mastra/core/tools';
 import 'apify-client';
 import '@aws-sdk/client-dynamodb';

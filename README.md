@@ -6,12 +6,12 @@ Run `aws sso login` before starting.
 **Development**
 
 - `make dev`: Deploys to your personal stack (e.g. `oneclickwebsite-dev-name`), writes API URL to frontend config, and watches for changes.
-- `make logs`: Streams logs from your dev stack.
+- Logs: [AWS CloudWatch Live Tail](https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:live-tail)
 
 **Production**
 
 - `make prod`: Full deployment to `oneclickwebsite-prod` (Backend + Terraform + Frontend).
-- `make logs STAGE=prod`: Streams logs from production.
+- Logs: [AWS CloudWatch Live Tail](https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:live-tail)
 
 **Setup**
 

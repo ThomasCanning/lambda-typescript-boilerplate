@@ -29,22 +29,27 @@ export const generateColorStep = createStep({
     colorOptions: colorOptionsSchema,
   }),
   execute: async ({ mastra, inputData }) => {
-    console.log("Starting generateColorStep", { jobId: inputData.jobId })
-
     if (inputData.jobId) {
       await updateJobAgentState(inputData.jobId, "color", "thinking")
     }
 
     const agent = mastra.getAgent("colorAgent")
-    const result = await agent.generate(JSON.stringify({ profileData: inputData.profileData }), {
+    const payload = JSON.stringify({ profileData: inputData.profileData })
+    console.log("Color Agent Input Payload:", payload)
+
+    const result = await agent.generate(payload, {
       output: colorOptionsSchema,
     })
+    // Log success without dumping object
+    console.log("Color Agent finished.")
 
     const colorOptions = JSON.parse(JSON.stringify(result.object))
 
     if (inputData.jobId) {
+      // We still update partials so they are safe in DB
       await updateJobPartial(inputData.jobId, "colorOptions", colorOptions)
-      await updateJobAgentState(inputData.jobId, "color", "waiting_for_user")
+      // signal completion to "thinking" -> "completed" so UI knows this specific agent is done
+      await updateJobAgentState(inputData.jobId, "color", "completed")
     }
 
     return { colorOptions }
@@ -62,8 +67,6 @@ export const generateCopyStep = createStep({
     copyOptions: copyOptionsSchema,
   }),
   execute: async ({ mastra, inputData }) => {
-    console.log("Starting generateCopyStep", { jobId: inputData.jobId })
-
     if (inputData.jobId) {
       await updateJobAgentState(inputData.jobId, "copy", "thinking")
     }
@@ -73,12 +76,16 @@ export const generateCopyStep = createStep({
       .generate(JSON.stringify({ profileData: inputData.profileData }), {
         output: copyOptionsSchema,
       })
+    // Log success without dumping object
+    console.log("Copy Agent finished.")
 
     const copyOptions = JSON.parse(JSON.stringify(result.object))
 
     if (inputData.jobId) {
+      // We still update partials so they are safe in DB
       await updateJobPartial(inputData.jobId, "copyOptions", copyOptions)
-      await updateJobAgentState(inputData.jobId, "copy", "waiting_for_user")
+      // signal completion to "thinking" -> "completed" so UI knows this specific agent is done
+      await updateJobAgentState(inputData.jobId, "copy", "completed")
     }
 
     return { copyOptions }
