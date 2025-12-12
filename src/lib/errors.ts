@@ -11,6 +11,7 @@ export const errorTypes = {
   unauthorized: "errors/unauthorized",
   badRequest: "errors/badRequest",
   notFound: "errors/notFound",
+  conflict: "errors/conflict",
 } as const
 
 export function createProblemDetails(options: ProblemDetails): ProblemDetails {

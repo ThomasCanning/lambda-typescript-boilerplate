@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -60,10 +60,15 @@ function HomePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
+      <div className="absolute top-4 right-4">
+        <Button variant="ghost" asChild>
+          <Link to="/login">Log in</Link>
+        </Button>
+      </div>
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">OneClickWebsite</h1>
+          <h1 className="text-3xl font-bold">OneClick</h1>
           <p className="text-muted-foreground">Generate your website in one click</p>
         </div>
 

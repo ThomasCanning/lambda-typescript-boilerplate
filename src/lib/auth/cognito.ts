@@ -3,6 +3,7 @@ import {
   InitiateAuthCommand,
   RevokeTokenCommand,
   SignUpCommand,
+  AdminConfirmSignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider"
 import { NodeHttpHandler } from "@smithy/node-http-handler"
 import { StatusCodes } from "http-status-codes"
@@ -180,6 +181,28 @@ export async function signUp(
       UserAttributes: [{ Name: "email", Value: username }],
     })
     const res = await getCognitoClient().send(cmd)
+
+    // Attempt to auto-confirm if user pool ID is available
+    if (process.env.USER_POOL_ID && !res.UserConfirmed) {
+      try {
+        const confirmCmd = new AdminConfirmSignUpCommand({
+          UserPoolId: process.env.USER_POOL_ID,
+          Username: username,
+        })
+        await getCognitoClient().send(confirmCmd)
+        return {
+          userSub: res.UserSub || "",
+          userConfirmed: true,
+        }
+      } catch (confirmError) {
+        console.warn("Failed to auto-confirm user", confirmError)
+        // Fallback to original status
+        return {
+          userSub: res.UserSub || "",
+          userConfirmed: false,
+        }
+      }
+    }
 
     return {
       userSub: res.UserSub || "",

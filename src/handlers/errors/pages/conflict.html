@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>500 Internal Server Error</title>
+    <title>409 Conflict</title>
     <style>
         * {
             margin: 0;
@@ -30,7 +30,7 @@
             width: 100%;
         }
         h1 {
-            color: #d32f2f;
+            color: #f57c00;
             font-size: 2.5em;
             margin-bottom: 10px;
         }
@@ -55,7 +55,7 @@
         .description {
             background: #f9f9f9;
             padding: 20px;
-            border-left: 4px solid #d32f2f;
+            border-left: 4px solid #f57c00;
             border-radius: 4px;
             margin: 20px 0;
         }
@@ -70,20 +70,22 @@
 </head>
 <body>
     <div class="container">
-        <h1>Internal Server Error</h1>
-        <div class="status-code">HTTP 500</div>
-        <div class="error-code">Error Code: Internal Server Error</div>
+        <h1>Conflict</h1>
+        <div class="status-code">HTTP 409</div>
+        <div class="error-code">Error Code: conflict</div>
         
         <div class="description">
             <p><strong>What happened?</strong></p>
-            <p>The server encountered an unexpected error while processing your request. This is a server-side issue, not a problem with your request.</p>
+            <p>The request could not be completed due to a conflict with the current state of the resource. This typically occurs when trying to create or update a resource that already exists or conflicts with existing data.</p>
         </div>
         
         <p><strong>What can you do?</strong></p>
         <ul style="margin-left: 20px; color: #555;">
-            <li>Wait a moment and try your request again</li>
-            <li>If the problem persists, the issue may be temporary. Please try again later</li>
-            <li>If you continue to see this error, please contact support</li>
+            <li>Check if the resource you're trying to create already exists</li>
+            <li>Verify that the data you're submitting doesn't conflict with existing records</li>
+            <li>If updating a resource, ensure you're using the correct version or timestamp</li>
+            <li>Review the error details to understand the specific conflict</li>
+            <li>You may need to retrieve the current state of the resource before making changes</li>
         </ul>
         
     </div>

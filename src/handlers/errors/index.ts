@@ -8,11 +8,17 @@ import internalServerError from "./pages/internalServerError.html"
 import unauthorized from "./pages/unauthorized.html"
 // @ts-expect-error: HTML import handled by esbuild loader
 import badRequest from "./pages/badRequest.html"
+// @ts-expect-error: HTML import handled by esbuild loader
+import notFound from "./pages/notFound.html"
+// @ts-expect-error: HTML import handled by esbuild loader
+import conflict from "./pages/conflict.html"
 
 const errorPages: Record<string, string> = {
   internalServerError,
   unauthorized,
   badRequest,
+  notFound,
+  conflict,
 }
 
 function getHtmlContent(errorCode: string): string | null {

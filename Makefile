@@ -110,7 +110,7 @@ refresh-dev-env:
 tf-apply:
 	@echo "🏗️  Deploying Terraform infrastructure..."
 	@HTTP_API_ID=$$(AWS_REGION=$(REGION) aws cloudformation describe-stacks \
-		--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`HttpApiId`].OutputValue' --output text); \
+		--stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`HttpApiId`].OutputValue' --output text 2>/dev/null || echo ""); \
 	eval $$(aws configure export-credentials --profile default --format env) && \
 	AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) init -upgrade >/dev/null && \
 	AWS_REGION=$(REGION) terraform -chdir=$(TF_DIR) apply \
@@ -124,7 +124,10 @@ tf-apply:
 # prod: Full production deployment (backend + Terraform + frontend)
 prod:
 	@echo "🚀 Deploying to production..."
-	@$(MAKE) ensure-config npm-install lint test sam-deploy set-admin-password tf-apply deploy-frontend STAGE=prod
+	@$(MAKE) ensure-config npm-install lint test
+	@# Run Terraform first to create bucket, then SAM can reference it
+	@$(MAKE) tf-apply STAGE=prod || echo "⚠️  Terraform apply failed or bucket already exists, continuing..."
+	@$(MAKE) sam-deploy set-admin-password deploy-frontend STAGE=prod
 	@echo "✅ Production deployment complete!"
 
 
@@ -337,8 +340,10 @@ npm-install:
 
 sam-deploy: validate-password
 	@if [ ! -f google-credentials.json ]; then echo "Error: google-credentials.json not found"; exit 1; fi
-	AWS_REGION=$(REGION) sam build
-
+	@# Get bucket name from Terraform (if available), otherwise use empty (will be set on first tf-apply)
+	@eval $$(aws configure export-credentials --profile default --format env 2>/dev/null) || true; \
+	USER_SITES_BUCKET=$$(cd $(TF_DIR) && terraform output -raw user_sites_bucket_name 2>/dev/null || echo ""); \
+	AWS_REGION=$(REGION) sam build; \
 	AWS_REGION=$(REGION) sam deploy --no-confirm-changeset --region $(REGION) \
 		--stack-name $(STACK_NAME) \
 		--parameter-overrides \
@@ -349,7 +354,8 @@ sam-deploy: validate-password
 			GoogleVertexProject=$(GOOGLE_VERTEX_PROJECT) \
 			GoogleVertexLocation=$(or $(GOOGLE_VERTEX_LOCATION),us-central1) \
 			GoogleCredentialsJson="$$(cat google-credentials.json | tr -d '\n' | base64 | tr -d '\n')" \
-			ApifyApiToken=$(APIFY_API_TOKEN)
+			ApifyApiToken=$(APIFY_API_TOKEN) \
+			UserSitesBucketName="$$USER_SITES_BUCKET"
 
 set-admin-password: validate-password
 	@echo "Setting admin user password..."

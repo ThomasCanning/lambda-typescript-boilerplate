@@ -1,51 +1,24 @@
 /**
- * Checks if an error is a CORS (Cross-Origin Resource Sharing) error.
- * Distinguishes CORS errors from DNS/network errors.
+ * RFC 7807 Problem Details for HTTP APIs
+ * Standard format for API error responses
  */
-export function isCorsError(error: unknown): boolean {
-  if (!(error instanceof TypeError || error instanceof Error)) {
-    return false
-  }
-
-  const message = error.message.toLowerCase()
-  const errorString = String(error).toLowerCase()
-
-  const dnsNetworkErrors = [
-    "err_name_not_resolved",
-    "err_connection_refused",
-    "err_network_changed",
-    "err_internet_disconnected",
-    "err_timed_out",
-    "err_address_unreachable",
-    "name_not_resolved",
-    "connection_refused",
-    "network_error",
-    "net::err_name_not_resolved",
-    "net::err_connection_refused",
-  ]
-
-  const fullErrorText = `${message} ${errorString}`
-  for (const dnsError of dnsNetworkErrors) {
-    if (fullErrorText.includes(dnsError)) {
-      return false
-    }
-  }
-
-  return message.includes("cors") || message.includes("cross-origin")
+export interface ProblemDetails {
+  type: string
+  status: number
+  detail: string
+  title?: string
 }
 
-/**
- * Parses an HTTP error response into a user-friendly error message.
- * Attempts to extract error details from JSON response body, falls back to status text or raw text.
- */
-export async function parseHttpError(response: Response): Promise<string> {
-  const errorText = await response.text()
-  let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-  try {
-    const errorJson = JSON.parse(errorText) as { error?: string }
-    errorMessage = errorJson.error || errorMessage
-  } catch {
-    errorMessage = errorText || errorMessage
+export function isProblemDetails(obj: unknown): obj is ProblemDetails {
+  if (typeof obj !== "object" || obj === null) return false
+  const e = obj as Record<string, unknown>
+  return typeof e.type === "string" && typeof e.status === "number" && typeof e.detail === "string"
+}
+
+export async function parseProblemDetails(response: Response): Promise<ProblemDetails> {
+  const data = (await response.json()) as ProblemDetails
+  if (!isProblemDetails(data)) {
+    throw new Error(`Expected ProblemDetails but got: ${JSON.stringify(data)}`)
   }
-  return errorMessage
+  return data
 }

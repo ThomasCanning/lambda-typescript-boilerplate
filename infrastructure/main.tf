@@ -50,6 +50,19 @@ resource "aws_acm_certificate_validation" "root_web_client" {
   certificate_arn = aws_acm_certificate.root_web_client.arn
 }
 
+# Certificate for *.domain.com (User Sites Wildcard)
+resource "aws_acm_certificate" "wildcard_user_sites" {
+  provider          = aws.us_east_1
+  domain_name       = "*.${var.root_domain_name}"
+  validation_method = "DNS"
+}
+
+resource "aws_acm_certificate_validation" "wildcard_user_sites" {
+  count           = var.wait_for_certificate_validation ? 1 : 0
+  provider        = aws.us_east_1
+  certificate_arn = aws_acm_certificate.wildcard_user_sites.arn
+}
+
 ########################
 # API Gateway Custom Domain (api.domain.com)
 ########################
@@ -193,6 +206,144 @@ resource "aws_cloudfront_distribution" "web_client" {
   }
 
   depends_on = [aws_acm_certificate_validation.root_web_client]
+}
+
+# Origin Access Control for secure S3 access from CloudFront
+resource "aws_cloudfront_origin_access_control" "user_sites" {
+  name                              = "user-sites-oac-${replace(var.root_domain_name, ".", "-")}"
+  description                       = "OAC for user sites bucket access from CloudFront"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+# Update S3 bucket policy to allow CloudFront OAC access
+resource "aws_s3_bucket_policy" "user_sites_oac" {
+  count  = var.wait_for_certificate_validation ? 1 : 0
+  bucket = aws_s3_bucket.user_sites.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudFrontServicePrincipal"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.user_sites.arn}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.user_sites[0].id}"
+          }
+        }
+      },
+      {
+        Sid    = "PublicReadGetObject"
+        Effect = "Allow"
+        Principal = "*"
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.user_sites.arn}/*"
+      }
+    ]
+  })
+
+  depends_on = [
+    aws_cloudfront_distribution.user_sites,
+    aws_cloudfront_origin_access_control.user_sites
+  ]
+}
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_cloudfront_function" "user_site_router" {
+  name    = "user-site-router-${replace(var.root_domain_name, ".", "-")}"
+  runtime = "cloudfront-js-1.0"
+  comment = "Rewrites subdomain requests to S3 folder paths"
+  publish = true
+  code    = <<EOF
+function handler(event) {
+    var request = event.request;
+    var host = request.headers.host.value;
+    var rootDomain = "${var.root_domain_name}";
+    
+    // Check if host ends with root domain (e.g. site.example.com)
+    // and is NOT the root domain itself or www
+    // and is NOT the api subdomain (handled by API Gateway custom domain, but for safety)
+    if (host.endsWith(rootDomain) && host !== rootDomain && host !== "www." + rootDomain && !host.startsWith("api.")) {
+        // Extract subdomain: "testsit.example.com" -> "testsit"
+        var subdomain = host.split('.')[0];
+        
+        // Rewrite URI from /path to /subdomain/path
+        // If URI is /, it becomes /subdomain/index.html via the S3 origin index config usually,
+        // but since we are mapping to folder, we should be explicit.
+        
+        if (request.uri === '/') {
+            request.uri = '/' + subdomain + '/index.html';
+        } else {
+             // Ensure we don't double rewrite if logic is complex, 
+             // but here we assume incoming request is clean.
+             request.uri = '/' + subdomain + request.uri;
+        }
+    }
+    return request;
+}
+EOF
+}
+
+resource "aws_cloudfront_distribution" "user_sites" {
+  count           = var.wait_for_certificate_validation ? 1 : 0
+  enabled         = true
+  aliases         = ["*.${var.root_domain_name}"]
+  comment         = "User sites wildcard distribution for *.${var.root_domain_name}"
+  price_class     = "PriceClass_100"
+  is_ipv6_enabled = true
+
+  origin {
+    domain_name              = aws_s3_bucket.user_sites.bucket_regional_domain_name
+    origin_id                = "s3-user-sites"
+    origin_access_control_id = aws_cloudfront_origin_access_control.user_sites.id
+  }
+
+  default_cache_behavior {
+    target_origin_id       = "s3-user-sites"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 3600
+    max_ttl     = 86400
+    compress    = true
+
+    // Attach the routing function
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.user_site_router.arn
+    }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate.wildcard_user_sites.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+  
+  depends_on = [aws_acm_certificate_validation.wildcard_user_sites]
 }
 
 

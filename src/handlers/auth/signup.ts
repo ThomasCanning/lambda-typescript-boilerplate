@@ -2,7 +2,8 @@ import { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-l
 import { StatusCodes } from "http-status-codes"
 import { jsonResponseHeaders } from "../../lib/auth" // Adjust import path if needed (../../lib/auth/index.ts exports headers?)
 import { createProblemDetails, errorTypes, isProblemDetails } from "../../lib/errors"
-import { signUp } from "../../lib/auth/cognito"
+import { signUp, authenticate } from "../../lib/auth/cognito"
+import { setAuthCookies } from "../../lib/auth/cookies"
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb"
 
@@ -132,9 +133,20 @@ export const handler = async (
       }
     }
 
+    // 3. Auto-login (Authenticate to get tokens)
+    let cookieHeaders: string[] = []
+    try {
+      const authResult = await authenticate(username, password, userPoolClientId)
+      cookieHeaders = setAuthCookies(authResult.bearerToken, authResult.refreshToken)
+    } catch (authError) {
+      console.warn("[Signup] Auto-login failed after successful signup", authError)
+      //TODO error here not warning
+    }
+
     return {
       statusCode: StatusCodes.CREATED,
       headers: jsonResponseHeaders(event),
+      cookies: cookieHeaders,
       body: JSON.stringify({ success: true, userId: userSub }),
     }
   } catch (error) {

@@ -6,7 +6,7 @@ import {
   updateJobStatus,
   updateJobAgentState,
   updateJobPartial,
-} from "../../lib/api/generate-status"
+} from "../../lib/api/generate/endpoints/status"
 import { fetchLinkedInProfiles } from "../../lib/mastra/tools/linkedin-profile"
 import { finalBuildSchema } from "../../lib/mastra/agents/seniorBuilder"
 import { colorOptionsSchema } from "../../lib/mastra/agents/color"
