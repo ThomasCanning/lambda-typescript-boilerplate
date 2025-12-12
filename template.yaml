@@ -482,6 +482,48 @@ Resources:
         EntryPoints:
           - src/handlers/api/generate-edit.ts
 
+  apiChatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/chat.chatHandler
+      MemorySize: 1024
+      Timeout: 300
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowCredentials: true
+          AllowOrigins:
+            - "http://localhost:5173"
+            - "https://oneclickwebsite.ai"
+            - "https://www.oneclickwebsite.ai"
+          AllowMethods:
+            - POST
+          AllowHeaders:
+            - Content-Type
+            - Authorization
+      Environment:
+        Variables:
+          MASTRA_TABLE_NAME: !Ref MastraStore
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          USER_POOL_ID: !Ref UserPool
+          USER_POOL_CLIENT_ID: !Ref UserPoolClient
+          GOOGLE_VERTEX_PROJECT: !Ref GoogleVertexProject
+          GOOGLE_VERTEX_LOCATION: !Ref GoogleVertexLocation
+          GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MastraStore
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GenerationJobsTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/chat.ts
+
 
 
 Outputs:
@@ -494,3 +536,6 @@ Outputs:
   UserPoolClientId:
     Description: "Cognito User Pool Client ID"
     Value: !Ref UserPoolClient
+  ChatFunctionUrl:
+    Description: "Chat Function URL"
+    Value: !GetAtt apiChatFunctionUrl.FunctionUrl

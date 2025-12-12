@@ -3,7 +3,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import { GlobalNav } from "../components/editor/GlobalNav"
 import { AICommandCenter } from "../components/editor/AICommandCenter"
 import { LivePreview } from "../components/editor/LivePreview"
-import { FloaterWidget } from "../components/editor/FloaterWidget"
+// import { FloaterWidget } from "../components/editor/FloaterWidget"
 import { useState } from "react"
 // import { useJobStatus } from '@/hooks/useJobStatus';
 import { CodeView } from "@/components/editor/CodeView"
@@ -40,7 +40,7 @@ function EditRoute() {
               {activeTab === "app" ? (
                 <>
                   <LivePreview />
-                  <FloaterWidget />
+                  {/* <FloaterWidget /> */}
                 </>
               ) : (
                 <CodeView />

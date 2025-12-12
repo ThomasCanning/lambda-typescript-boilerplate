@@ -1,4 +1,4 @@
-import { LayoutGrid, Code, Database, CreditCard, Send, Settings, User } from "lucide-react"
+import { LayoutGrid, Code, Send, Settings, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -48,14 +48,14 @@ export function GlobalNav({ activeTab, onTabChange }: GlobalNavProps) {
             <Code className="size-4" />
             Code
           </Button>
-          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
+          {/* <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
             <Database className="size-4" />
             Database
           </Button>
           <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
             <CreditCard className="size-4" />
             Billing
-          </Button>
+          </Button> */}
         </nav>
       </div>
 

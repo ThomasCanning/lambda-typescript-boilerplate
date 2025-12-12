@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { motion, AnimatePresence } from "framer-motion"
 import { useEditor } from "@/components/editor/EditorProvider" // Import context hook
-import { sendEditCommand } from "@/lib/api"
+import { streamChat } from "@/lib/api"
 
 type ThoughtStep = {
   icon: string
@@ -39,8 +39,31 @@ export function AICommandCenter() {
     const newMessage: HistoryItem = { type: "user", content: input }
     setLocalHistory((prev) => [...prev, newMessage])
 
-    await sendEditCommand(jobId, input)
+    // Add placeholder for agent response
+    setLocalHistory((prev) => [...prev, { type: "agent", content: "" }])
+
     setInput("")
+
+    try {
+      await streamChat(jobId, input, (chunk) => {
+        setLocalHistory((prev) => {
+          const lastIndex = prev.length - 1
+          const last = prev[lastIndex]
+          if (last.type === "agent") {
+            const newHistory = [...prev]
+            newHistory[lastIndex] = { ...last, content: last.content + chunk }
+            return newHistory
+          }
+          return prev
+        })
+      })
+    } catch (err) {
+      console.error("Streaming failed", err)
+      setLocalHistory((prev) => [
+        ...prev,
+        { type: "agent", content: "Error: Failed to stream response." },
+      ])
+    }
   }
 
   // ... (keep definitions of steps, currentProcess, systemMessage) ...
