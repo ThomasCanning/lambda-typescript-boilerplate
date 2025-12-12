@@ -1,8 +1,8 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda"
 import { StatusCodes } from "http-status-codes"
-import { jsonResponseHeaders } from "../../lib/auth"
-import { createProblemDetails, errorTypes } from "../../lib/errors"
-import { startGenerate } from "../../lib/api/generate-start"
+import { jsonResponseHeaders } from "../../../lib/auth"
+import { createProblemDetails, errorTypes } from "../../../lib/errors"
+import { startGenerate } from "../../../lib/api/generate-start"
 
 /*
  * Initiates a new website generation job based on a provided URL or prompt.

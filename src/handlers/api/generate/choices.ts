@@ -1,8 +1,8 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda"
 import { StatusCodes } from "http-status-codes"
-import { jsonResponseHeaders } from "../../lib/auth"
-import { createProblemDetails, errorTypes } from "../../lib/errors"
-import { submitGenerateChoices } from "../../lib/api/generate-choices"
+import { jsonResponseHeaders } from "../../../lib/auth"
+import { createProblemDetails, errorTypes } from "../../../lib/errors"
+import { submitGenerateChoices } from "../../../lib/api/generate-choices"
 
 interface GenerateChoicesInput {
   selectedPaletteId?: string
