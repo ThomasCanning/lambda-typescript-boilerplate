@@ -528,6 +528,77 @@ Resources:
         EntryPoints:
           - src/handlers/api/edit/upload.ts
 
+  apiEditGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/edit/get.handler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          USERS_TABLE: !Ref UsersTable
+      Events:
+        ApiWithJobId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit/{jobId}
+            Method: GET
+        ApiWithoutJobId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GenerationJobsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/edit/get.ts
+
+  apiEditPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/edit/post.handler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          USERS_TABLE: !Ref UsersTable
+      Events:
+        ApiWithJobId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit/{jobId}
+            Method: POST
+        ApiWithoutJobId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GenerationJobsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/edit/post.ts
+
+
 Outputs:
   HttpApiId:
     Description: "HTTP API ID"

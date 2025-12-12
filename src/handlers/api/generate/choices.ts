@@ -2,7 +2,7 @@ import { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-l
 import { StatusCodes } from "http-status-codes"
 import { jsonResponseHeaders } from "../../../lib/auth"
 import { createProblemDetails, errorTypes } from "../../../lib/errors"
-import { submitGenerateChoices } from "../../../lib/api/generate-choices"
+import { submitGenerateChoices } from "../../../lib/api/generate/endpoints/choices"
 
 interface GenerateChoicesInput {
   selectedPaletteId?: string

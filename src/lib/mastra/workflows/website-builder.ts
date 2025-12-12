@@ -12,7 +12,7 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows"
 import { z } from "zod"
 import { linkedInProfileSchema } from "../tools/linkedin-profile"
-import { updateJobAgentState, updateJobPartial } from "../../api/generate-status"
+import { updateJobAgentState, updateJobPartial } from "../../api/generate/endpoints/status"
 import { colorOptionsSchema } from "../agents/color"
 import { copyOptionsSchema } from "../agents/copywriter"
 

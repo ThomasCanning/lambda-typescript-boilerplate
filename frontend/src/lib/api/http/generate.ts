@@ -1,4 +1,4 @@
-import { parseHttpError } from "../../shared/utils/error-handling"
+import { parseProblemDetails } from "../../shared/utils/error-handling"
 import { authFetch } from "../../shared/http/authFetch"
 
 export interface GenerateRequest {
@@ -59,8 +59,8 @@ export async function postGenerateStart(request: GenerateRequest): Promise<Gener
   })
 
   if (!response.ok) {
-    const errorMessage = await parseHttpError(response)
-    throw new Error(errorMessage)
+    const problem = await parseProblemDetails(response)
+    throw new Error(problem.detail)
   }
 
   return response.json() as Promise<GenerateStartResponse>
@@ -72,8 +72,8 @@ export async function getGenerateStatus(jobId: string): Promise<GenerateStatusRe
   })
 
   if (!response.ok) {
-    const errorMessage = await parseHttpError(response)
-    throw new Error(errorMessage)
+    const problem = await parseProblemDetails(response)
+    throw new Error(problem.detail)
   }
 
   return response.json() as Promise<GenerateStatusResponse>
@@ -93,8 +93,8 @@ export async function postGenerateChoices(
   })
 
   if (!response.ok) {
-    const errorMessage = await parseHttpError(response)
-    throw new Error(errorMessage)
+    const problem = await parseProblemDetails(response)
+    throw new Error(problem.detail)
   }
 
   return response.json() as Promise<{ jobId: string; status: GenerateJobStatus }>

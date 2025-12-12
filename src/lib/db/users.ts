@@ -113,3 +113,23 @@ export async function updateUserSubdomain(userId: string, subdomain: string) {
     })
   )
 }
+
+export async function updateUserWebsiteData(userId: string, websiteData: WebsiteData) {
+  const tableName = process.env.USERS_TABLE
+  if (!tableName) {
+    throw new Error("Missing required environment variable: USERS_TABLE")
+  }
+  const client = createDynamoClient()
+
+  await client.send(
+    new UpdateCommand({
+      TableName: tableName,
+      Key: { userId },
+      UpdateExpression: "SET websiteData = :websiteData, updatedAt = :updatedAt",
+      ExpressionAttributeValues: {
+        ":websiteData": websiteData,
+        ":updatedAt": new Date().toISOString(),
+      },
+    })
+  )
+}

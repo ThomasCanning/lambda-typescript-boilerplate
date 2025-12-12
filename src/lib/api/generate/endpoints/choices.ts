@@ -1,7 +1,7 @@
 import { SQSClient, SendMessageCommand, SQSClientConfig } from "@aws-sdk/client-sqs"
 import { DynamoDBClient, DynamoDBClientConfig } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb"
-import { GenerateJobStatus } from "./generate-status"
+import { GenerateJobStatus } from "./status"
 
 interface ChoicesPayload {
   selectedPaletteId?: string

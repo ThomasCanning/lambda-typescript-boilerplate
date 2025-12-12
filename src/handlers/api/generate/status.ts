@@ -2,7 +2,7 @@ import { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-l
 import { StatusCodes } from "http-status-codes"
 import { jsonResponseHeaders } from "../../../lib/auth"
 import { createProblemDetails, errorTypes } from "../../../lib/errors"
-import { NotFoundError, getGenerateStatus } from "../../../lib/api/generate-status"
+import { NotFoundError, getGenerateStatus } from "../../../lib/api/generate/endpoints/status"
 
 /**
  * Retrieves the current status of a specific generation job.
