@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
+import { toast } from "sonner"
 import { EditPage } from "@/components/edit/edit-page"
 import { EditHeaderAuthed } from "@/components/edit/edit-header-authed"
 import { useUser, deploySite } from "@/lib/api"
@@ -56,9 +57,17 @@ function EditAuthedPage() {
         setIsDeployDialogOpen(false)
         if (!import.meta.env.DEV) {
           await refreshUser()
+          toast.success("Website published successfully!", {
+            action: {
+              label: "Open",
+              onClick: () => res.url && window.open(res.url, "_blank"),
+            },
+          })
           if (res.url) {
             window.open(res.url, "_blank")
           }
+        } else {
+          toast.success("Website published successfully! (Dev Mode)")
         }
       } else {
         if (res.error?.status === 409) {

@@ -515,6 +515,8 @@ Resources:
             Path: /api/edit/upload
             Method: POST
       Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref UserSitesBucketName
         - S3WritePolicy:
             BucketName: !Ref UserSitesBucketName
         - DynamoDBCrudPolicy:
