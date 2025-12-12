@@ -7,6 +7,7 @@ import { setAuthCookies } from "./cookies"
 import { verifyBearerFromEvent } from "./verification"
 import { authenticate, refresh } from "./cognito"
 import { createProblemDetails, errorTypes, isProblemDetails } from "../errors"
+import { getUser } from "../db/users"
 
 function buildResponseWithCookies(
   handlerResponse: APIGatewayProxyStructuredResultV2,
@@ -160,7 +161,21 @@ export function withAuth(
       if ("statusCode" in result) return result as APIGatewayProxyStructuredResultV2
 
       // Otherwise it's the Auth object, proceed to handler
-      return await handler(event, (result as { auth: AuthResult }).auth)
+      const authResult = (result as { auth: AuthResult }).auth
+
+      // Attempt to fetch user profile
+      try {
+        if (process.env.USERS_TABLE) {
+          const user = await getUser(authResult.username)
+          if (user) {
+            authResult.user = user
+          }
+        }
+      } catch (err) {
+        console.warn("[withAuth] Failed to load user data", err)
+      }
+
+      return await handler(event, authResult)
     } catch (error) {
       // If an appropriate problem details object is returned, return it
       if (isProblemDetails(error)) {

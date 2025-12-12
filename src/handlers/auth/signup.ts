@@ -13,7 +13,11 @@ interface SignupRequestBody {
 }
 
 function createDynamoClient() {
-  return DynamoDBDocumentClient.from(new DynamoDBClient({}))
+  return DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+    marshallOptions: {
+      removeUndefinedValues: true,
+    },
+  })
 }
 
 export const handler = async (
