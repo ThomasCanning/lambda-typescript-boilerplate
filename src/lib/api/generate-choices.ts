@@ -12,26 +12,14 @@ interface ChoicesPayload {
 function createDynamoClient(): DynamoDBDocumentClient {
   const config: DynamoDBClientConfig = {}
   if (process.env.AWS_REGION) config.region = process.env.AWS_REGION
-  if (process.env.DDB_ENDPOINT) config.endpoint = process.env.DDB_ENDPOINT
-  if (config.endpoint || process.env.IS_LOCAL_DEV === "true") {
-    config.credentials = {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID || "local",
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "local",
-    }
-  }
+
   return DynamoDBDocumentClient.from(new DynamoDBClient(config))
 }
 
 function createSqsClient(): SQSClient {
   const config: SQSClientConfig = {}
   if (process.env.AWS_REGION) config.region = process.env.AWS_REGION
-  if (process.env.SQS_ENDPOINT) config.endpoint = process.env.SQS_ENDPOINT
-  if (config.endpoint || process.env.IS_LOCAL_DEV === "true") {
-    config.credentials = {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID || "local",
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "local",
-    }
-  }
+
   return new SQSClient(config)
 }
 

@@ -50,15 +50,6 @@ export class NotFoundError extends Error {
 function createDynamoClient(): DynamoDBDocumentClient {
   const config: DynamoDBClientConfig = {}
   if (process.env.AWS_REGION) config.region = process.env.AWS_REGION
-  if (process.env.DDB_ENDPOINT) config.endpoint = process.env.DDB_ENDPOINT
-
-  // Dynamo local still needs credentials for request signing.
-  if (config.endpoint || process.env.IS_LOCAL_DEV === "true") {
-    config.credentials = {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID || "local",
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "local",
-    }
-  }
 
   return DynamoDBDocumentClient.from(new DynamoDBClient(config), {
     marshallOptions: {

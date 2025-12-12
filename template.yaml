@@ -97,7 +97,7 @@ Resources:
     Type: AWS::Cognito::UserPoolClient
     Properties:
       UserPoolId: !Ref UserPool
-      ClientName: lambda-api-client
+      ClientName: !Sub '${AWS::StackName}-client'
       GenerateSecret: false
       ExplicitAuthFlows:
         - ALLOW_USER_PASSWORD_AUTH
@@ -164,6 +164,35 @@ Resources:
         Sourcemap: true
         EntryPoints:
           - src/handlers/auth/logout.ts
+
+  authSignupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/auth/signup.handler
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /auth/signup
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref GenerationJobsTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/auth/signup.ts
 
   authLoginFunction:
     Type: AWS::Serverless::Function
@@ -238,7 +267,7 @@ Resources:
     Type: AWS::Cognito::UserPool
     DeletionPolicy: Retain
     Properties:
-      UserPoolName: lambda-api-UserPool
+      UserPoolName: !Sub '${AWS::StackName}-UserPool'
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -266,6 +295,17 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: expiresAt
         Enabled: true
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
 
   MastraStore:
     Type: AWS::DynamoDB::Table
@@ -331,8 +371,6 @@ Resources:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
           GENERATION_QUEUE_URL: !Ref GenerationQueue
-          DDB_ENDPOINT: ""
-          SQS_ENDPOINT: ""
       Events:
         Api:
           Type: HttpApi
@@ -361,7 +399,6 @@ Resources:
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
-          DDB_ENDPOINT: ""
       Events:
         Api:
           Type: HttpApi
@@ -389,8 +426,6 @@ Resources:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
           GENERATION_QUEUE_URL: !Ref GenerationQueue
-          DDB_ENDPOINT: ""
-          SQS_ENDPOINT: ""
       Events:
         Api:
           Type: HttpApi
@@ -426,8 +461,6 @@ Resources:
           MASTRA_TABLE_NAME: !Ref MastraStore
 
           GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
-          DDB_ENDPOINT: ""
-          SQS_ENDPOINT: ""
           GENERATION_QUEUE_URL: !Ref GenerationQueue
       Events:
         QueueEvent:

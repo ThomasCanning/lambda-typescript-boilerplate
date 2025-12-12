@@ -17,15 +17,6 @@ interface StartPayload {
 function createDynamoClient(): DynamoDBDocumentClient {
   const config: DynamoDBClientConfig = {}
   if (process.env.AWS_REGION) config.region = process.env.AWS_REGION
-  if (process.env.DDB_ENDPOINT) config.endpoint = process.env.DDB_ENDPOINT
-
-  // When talking to local emulators the SDK still expects credentials.
-  if (config.endpoint || process.env.IS_LOCAL_DEV === "true") {
-    config.credentials = {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID || "local",
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "local",
-    }
-  }
 
   return DynamoDBDocumentClient.from(new DynamoDBClient(config))
 }
@@ -33,15 +24,6 @@ function createDynamoClient(): DynamoDBDocumentClient {
 function createSqsClient(): SQSClient {
   const config: SQSClientConfig = {}
   if (process.env.AWS_REGION) config.region = process.env.AWS_REGION
-  if (process.env.SQS_ENDPOINT) config.endpoint = process.env.SQS_ENDPOINT
-
-  // Local SQS emulators also require credentials for request signing.
-  if (config.endpoint || process.env.IS_LOCAL_DEV === "true") {
-    config.credentials = {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID || "local",
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "local",
-    }
-  }
 
   return new SQSClient(config)
 }
@@ -73,8 +55,8 @@ export async function startGenerate(body: string | null): Promise<GenerateStartR
 
   const now = new Date().toISOString()
   const jobId = randomUUID()
-  // Set TTL to 10 minutes from now (Unix timestamp in seconds)
-  const expiresAt = Math.floor(Date.now() / 1000) + 600
+  // Set TTL to 1 hour from now (Unix timestamp in seconds)
+  const expiresAt = Math.floor(Date.now() / 1000) + 3600
 
   await dynamoClient.send(
     new PutCommand({

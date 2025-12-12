@@ -2,7 +2,11 @@ import { SQSRecord } from "aws-lambda/trigger/sqs"
 import { DynamoDBClient, DynamoDBClientConfig } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb"
 import { mastra } from "../../lib/mastra"
-import { updateJobStatus, updateJobAgentState } from "../../lib/api/generate-status"
+import {
+  updateJobStatus,
+  updateJobAgentState,
+  updateJobPartial,
+} from "../../lib/api/generate-status"
 import { fetchLinkedInProfiles } from "../../lib/mastra/tools/linkedin-profile"
 import { finalBuildSchema } from "../../lib/mastra/agents/seniorBuilder"
 import { colorOptionsSchema } from "../../lib/mastra/agents/color"
@@ -26,7 +30,7 @@ function getEnvVar(name: string): string {
 function createDynamoClient() {
   const config: DynamoDBClientConfig = {}
   if (process.env.AWS_REGION) config.region = process.env.AWS_REGION
-  if (process.env.DDB_ENDPOINT) config.endpoint = process.env.DDB_ENDPOINT
+
   return DynamoDBDocumentClient.from(new DynamoDBClient(config))
 }
 
@@ -166,8 +170,10 @@ async function processRecord(record: SQSRecord): Promise<void> {
       const finalHtml = buildResult.object.index_html
 
       // 4. Complete Job
+      // Save finalHtml without overwriting other partials
+      await updateJobPartial(jobId, "finalHtml", finalHtml)
+
       await updateJobStatus(jobId, "succeeded", {
-        partials: { finalHtml },
         result: { text: "Website generated successfully" },
         progressMessage: "Website created!",
       })
