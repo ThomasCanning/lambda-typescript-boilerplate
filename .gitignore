@@ -26,3 +26,5 @@ variableoutputs.txt
 # Google credentials
 google-credentials.json
 frontend/.env.local
+.mastra
+

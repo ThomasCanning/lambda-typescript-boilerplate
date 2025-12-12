@@ -49,6 +49,10 @@ Parameters:
     Type: String
     Description: "Apify API Token for LinkedIn scraping"
     NoEcho: true
+  UserSitesBucketName:
+    Type: String
+    Description: "S3 bucket name for user sites (created by Terraform). Leave empty for dev (dev uses blob download instead)."
+    Default: ""
 
 # Globals section for shared function and API Gateway configuration
 Globals:
@@ -97,7 +101,7 @@ Resources:
     Type: AWS::Cognito::UserPoolClient
     Properties:
       UserPoolId: !Ref UserPool
-      ClientName: lambda-api-client
+      ClientName: !Sub '${AWS::StackName}-client'
       GenerateSecret: false
       ExplicitAuthFlows:
         - ALLOW_USER_PASSWORD_AUTH
@@ -125,6 +129,9 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/auth/authed.authedHandler
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
       Events:
         Api:
           Type: HttpApi
@@ -132,6 +139,9 @@ Resources:
             ApiId: !Ref LambdaHttpApi
             Path: /api/authed
             Method: POST
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -164,6 +174,39 @@ Resources:
         Sourcemap: true
         EntryPoints:
           - src/handlers/auth/logout.ts
+
+  authSignupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/auth/signup.handler
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /auth/signup
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref GenerationJobsTable
+        - Statement:
+            - Effect: Allow
+              Action: cognito-idp:AdminConfirmSignUp
+              Resource: !GetAtt UserPool.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/auth/signup.ts
 
   authLoginFunction:
     Type: AWS::Serverless::Function
@@ -238,7 +281,7 @@ Resources:
     Type: AWS::Cognito::UserPool
     DeletionPolicy: Retain
     Properties:
-      UserPoolName: lambda-api-UserPool
+      UserPoolName: !Sub '${AWS::StackName}-UserPool'
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -266,6 +309,17 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: expiresAt
         Enabled: true
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
 
   MastraStore:
     Type: AWS::DynamoDB::Table
@@ -326,13 +380,11 @@ Resources:
   apiGenerateStartFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/api/generate-start.generateStartHandler
+      Handler: src/handlers/api/generate/start.generateStartHandler
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
           GENERATION_QUEUE_URL: !Ref GenerationQueue
-          DDB_ENDPOINT: ""
-          SQS_ENDPOINT: ""
       Events:
         Api:
           Type: HttpApi
@@ -352,16 +404,15 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/api/generate-start.ts
+          - src/handlers/api/generate/start.ts
 
   apiGenerateStatusFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/api/generate-status.generateStatusHandler
+      Handler: src/handlers/api/generate/status.generateStatusHandler
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
-          DDB_ENDPOINT: ""
       Events:
         Api:
           Type: HttpApi
@@ -379,18 +430,16 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/api/generate-status.ts
+          - src/handlers/api/generate/status.ts
 
   apiGenerateChoicesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/api/generate-choices.generateChoicesHandler
+      Handler: src/handlers/api/generate/choices.generateChoicesHandler
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
           GENERATION_QUEUE_URL: !Ref GenerationQueue
-          DDB_ENDPOINT: ""
-          SQS_ENDPOINT: ""
       Events:
         Api:
           Type: HttpApi
@@ -410,7 +459,7 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/api/generate-choices.ts
+          - src/handlers/api/generate/choices.ts
 
 
 
@@ -426,8 +475,6 @@ Resources:
           MASTRA_TABLE_NAME: !Ref MastraStore
 
           GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
-          DDB_ENDPOINT: ""
-          SQS_ENDPOINT: ""
           GENERATION_QUEUE_URL: !Ref GenerationQueue
       Events:
         QueueEvent:
@@ -451,6 +498,105 @@ Resources:
         EntryPoints:
           - src/handlers/queue/generate-worker.ts
 
+  apiUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/edit/upload.handler
+      Environment:
+        Variables:
+          USER_SITES_BUCKET: !Ref UserSitesBucketName
+          USERS_TABLE: !Ref UsersTable
+          ROOT_DOMAIN: !Ref RootDomainName
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit/upload
+            Method: POST
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref UserSitesBucketName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/edit/upload.ts
+
+  apiEditGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/edit/get.handler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          USERS_TABLE: !Ref UsersTable
+      Events:
+        ApiWithJobId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit/{jobId}
+            Method: GET
+        ApiWithoutJobId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref GenerationJobsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/edit/get.ts
+
+  apiEditPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/edit/post.handler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          USERS_TABLE: !Ref UsersTable
+      Events:
+        ApiWithJobId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit/{jobId}
+            Method: POST
+        ApiWithoutJobId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GenerationJobsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/edit/post.ts
 
 
 Outputs:

@@ -8,11 +8,16 @@ export interface CognitoJWTClaims extends JWTPayload {
   "cognito:username"?: string
 }
 
+import { User } from "../db/users"
+
+// ...
+
 export type AuthResult = {
   username: string
   bearerToken?: string
   refreshToken?: string
   claims?: CognitoJWTClaims
+  user?: User
 }
 
 export type HandlerFunction = (

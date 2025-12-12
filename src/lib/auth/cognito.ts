@@ -2,6 +2,8 @@ import {
   CognitoIdentityProviderClient,
   InitiateAuthCommand,
   RevokeTokenCommand,
+  SignUpCommand,
+  AdminConfirmSignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider"
 import { NodeHttpHandler } from "@smithy/node-http-handler"
 import { StatusCodes } from "http-status-codes"
@@ -146,5 +148,75 @@ export async function revokeToken(refreshToken: string, userPoolClientId: string
     }
     // Wrap AWS SDK errors - but don't fail logout if token revocation fails
     // Don't throw - logout should succeed even if revocation fails
+  }
+}
+
+export async function signUp(
+  username: string,
+  password: string,
+  userPoolClientId: string
+): Promise<{ userSub: string; userConfirmed: boolean }> {
+  if (!username || username.trim().length === 0) {
+    throw createProblemDetails({
+      type: errorTypes.badRequest,
+      status: StatusCodes.BAD_REQUEST,
+      detail: "Username is required",
+      title: "Bad Request",
+    })
+  }
+  if (!password || password.length === 0) {
+    throw createProblemDetails({
+      type: errorTypes.badRequest,
+      status: StatusCodes.BAD_REQUEST,
+      detail: "Password is required",
+      title: "Bad Request",
+    })
+  }
+
+  try {
+    const cmd = new SignUpCommand({
+      ClientId: userPoolClientId,
+      Username: username,
+      Password: password,
+      UserAttributes: [{ Name: "email", Value: username }],
+    })
+    const res = await getCognitoClient().send(cmd)
+
+    // Attempt to auto-confirm if user pool ID is available
+    if (process.env.USER_POOL_ID && !res.UserConfirmed) {
+      try {
+        const confirmCmd = new AdminConfirmSignUpCommand({
+          UserPoolId: process.env.USER_POOL_ID,
+          Username: username,
+        })
+        await getCognitoClient().send(confirmCmd)
+        return {
+          userSub: res.UserSub || "",
+          userConfirmed: true,
+        }
+      } catch (confirmError) {
+        console.warn("Failed to auto-confirm user", confirmError)
+        // Fallback to original status
+        return {
+          userSub: res.UserSub || "",
+          userConfirmed: false,
+        }
+      }
+    }
+
+    return {
+      userSub: res.UserSub || "",
+      userConfirmed: res.UserConfirmed || false,
+    }
+  } catch (error) {
+    if (isProblemDetails(error)) {
+      throw error
+    }
+    throw createProblemDetails({
+      type: errorTypes.badRequest,
+      status: StatusCodes.BAD_REQUEST,
+      detail: (error as Error).message || "Signup failed",
+      title: "Signup Failed",
+    })
   }
 }
