@@ -124,7 +124,7 @@ Resources:
   apiAuthedFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/api/authed.authedHandler
+      Handler: src/handlers/auth/authed.authedHandler
       Events:
         Api:
           Type: HttpApi
@@ -139,7 +139,7 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/api/authed.ts
+          - src/handlers/auth/authed.ts
 
 
 
