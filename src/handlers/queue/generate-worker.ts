@@ -7,6 +7,7 @@ import { fetchLinkedInProfiles } from "../../lib/mastra/tools/linkedin-profile"
 import { finalBuildSchema } from "../../lib/mastra/agents/seniorBuilder"
 import { colorOptionsSchema } from "../../lib/mastra/agents/color"
 import { copyOptionsSchema } from "../../lib/mastra/agents/copywriter"
+import { editorSchema } from "../../lib/mastra/agents/editor"
 import { z } from "zod"
 
 interface QueueMessage {
@@ -15,6 +16,7 @@ interface QueueMessage {
   // Choice fields
   selectedPaletteId?: string
   selectedCopyId?: string
+  editPrompt?: string
 }
 
 function getEnvVar(name: string): string {
@@ -46,6 +48,46 @@ async function processRecord(record: SQSRecord): Promise<void> {
   const tableName = getEnvVar("GENERATION_JOBS_TABLE")
 
   try {
+    // --- ROUTING LOGIC: Determine which operation to perform ---
+    // ROUTE 1: EDIT OPERATION (Check first - highest priority)
+    if (message.editPrompt) {
+      console.log(`[Job ${jobId}] Edit operation detected`)
+      // 1. Fetch the current job from DynamoDB
+      const jobRecord = await dynamoClient.send(
+        new GetCommand({ TableName: tableName, Key: { jobId } })
+      )
+      if (!jobRecord.Item) {
+        throw new Error(`Job ${jobId} not found`)
+      }
+      const partials = jobRecord.Item.partials
+      // 2. Extract partials.finalHtml
+      const currentHtml = partials.finalHtml
+      //3. Update status: running, progressMessage: "Agent is thinking..."
+      await updateJobStatus(jobId, "running", {
+        currentStep: "editing",
+        progressMessage: "Agent is thinking...",
+      })
+      await updateJobAgentState(jobId, "editor", "thinking")
+      //4. Call the Editor Agent
+      console.log(`[Job ${jobId}] Calling editor agent with prompt: ${message.editPrompt}`)
+      const editorAgent = mastra.getAgent("editorAgent")
+      const result = await editorAgent.generate(
+        JSON.stringify({
+          currentHtml: currentHtml,
+          userRequest: message.editPrompt,
+        }),
+        { output: editorSchema }
+      )
+      console.log(`[Job ${jobId}] Editor agent generated result: ${result.object.modifiedHtml}`)
+      //5. Update DynamoDB with the new finalHtml and set progressMessage: "Changes applied!"
+      await updateJobStatus(jobId, "succeeded", {
+        partials: { finalHtml: result.object.modifiedHtml },
+        progressMessage: "Changes applied!",
+      })
+      await updateJobAgentState(jobId, "editor", "completed")
+      return // Exit early - edit operation complete
+    }
+
     // Check if this is a "Choice Submission" or "New Job"
     const isResume = Boolean(message.selectedPaletteId || message.selectedCopyId)
 

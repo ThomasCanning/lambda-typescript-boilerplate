@@ -63,8 +63,10 @@ dev:
 
 # studio: Start the Mastra Studio
 studio:
+	@if [ ! -f google-credentials.json ]; then echo "Error: google-credentials.json not found"; exit 1; fi
 	@echo "Starting Mastra Studio..."
-	@NODE_ENV=development npm run dev:mastra
+	@export GOOGLE_CREDENTIALS_JSON="$$(cat google-credentials.json | tr -d '\n' | base64 | tr -d '\n')" && \
+	NODE_ENV=development npm run dev:mastra
 
 _dev-deploy:
 	@echo "   Stack: $(STACK_NAME)"

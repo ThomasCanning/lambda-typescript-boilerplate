@@ -8,61 +8,78 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as GenerateJobIdRouteImport } from './routes/generate.$jobId'
+import { Route as rootRouteImport } from "./routes/__root"
+import { Route as IndexRouteImport } from "./routes/index"
+import { Route as GenerateJobIdRouteImport } from "./routes/generate.$jobId"
+import { Route as EditJobIdRouteImport } from "./routes/edit.$jobId"
 
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenerateJobIdRoute = GenerateJobIdRouteImport.update({
-  id: '/generate/$jobId',
-  path: '/generate/$jobId',
+  id: "/generate/$jobId",
+  path: "/generate/$jobId",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EditJobIdRoute = EditJobIdRouteImport.update({
+  id: "/edit/$jobId",
+  path: "/edit/$jobId",
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/generate/$jobId': typeof GenerateJobIdRoute
+  "/": typeof IndexRoute
+  "/edit/$jobId": typeof EditJobIdRoute
+  "/generate/$jobId": typeof GenerateJobIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/generate/$jobId': typeof GenerateJobIdRoute
+  "/": typeof IndexRoute
+  "/edit/$jobId": typeof EditJobIdRoute
+  "/generate/$jobId": typeof GenerateJobIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/generate/$jobId': typeof GenerateJobIdRoute
+  "/": typeof IndexRoute
+  "/edit/$jobId": typeof EditJobIdRoute
+  "/generate/$jobId": typeof GenerateJobIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/generate/$jobId'
+  fullPaths: "/" | "/edit/$jobId" | "/generate/$jobId"
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/generate/$jobId'
-  id: '__root__' | '/' | '/generate/$jobId'
+  to: "/" | "/edit/$jobId" | "/generate/$jobId"
+  id: "__root__" | "/" | "/edit/$jobId" | "/generate/$jobId"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EditJobIdRoute: typeof EditJobIdRoute
   GenerateJobIdRoute: typeof GenerateJobIdRoute
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
+    "/": {
+      id: "/"
+      path: "/"
+      fullPath: "/"
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/generate/$jobId': {
-      id: '/generate/$jobId'
-      path: '/generate/$jobId'
-      fullPath: '/generate/$jobId'
+    "/generate/$jobId": {
+      id: "/generate/$jobId"
+      path: "/generate/$jobId"
+      fullPath: "/generate/$jobId"
       preLoaderRoute: typeof GenerateJobIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/edit/$jobId": {
+      id: "/edit/$jobId"
+      path: "/edit/$jobId"
+      fullPath: "/edit/$jobId"
+      preLoaderRoute: typeof EditJobIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EditJobIdRoute: EditJobIdRoute,
   GenerateJobIdRoute: GenerateJobIdRoute,
 }
 export const routeTree = rootRouteImport

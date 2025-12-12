@@ -451,6 +451,37 @@ Resources:
         EntryPoints:
           - src/handlers/queue/generate-worker.ts
 
+  apiGenerateEditFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/generate-edit.generateEditHandler
+      Environment:
+        Variables:
+          GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          GENERATION_QUEUE_URL: !Ref GenerationQueue
+          DDB_ENDPOINT: ""
+          SQS_ENDPOINT: ""
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/generate/edit/{jobId}
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GenerationJobsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt GenerationQueue.QueueName
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/generate-edit.ts
+
 
 
 Outputs:

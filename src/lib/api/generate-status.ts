@@ -169,7 +169,7 @@ export async function updateJobStatus(
 
 export async function updateJobAgentState(
   jobId: string,
-  agent: "color" | "copy" | "senior",
+  agent: "color" | "copy" | "senior" | "editor",
   state: "idle" | "thinking" | "waiting_for_user" | "completed"
 ) {
   const tableName = getEnvVar("GENERATION_JOBS_TABLE")

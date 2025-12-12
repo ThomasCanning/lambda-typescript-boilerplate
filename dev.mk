@@ -1,1 +1,1 @@
-DEV_NAME = tcanning
+DEV_NAME = varnie

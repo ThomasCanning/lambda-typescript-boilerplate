@@ -6,7 +6,7 @@ import { generateEmptyFromSchema, checkEvalStorageFields } from '@mastra/core/ut
 import { Mastra } from '@mastra/core';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z, ZodObject, ZodFirstPartyTypeKind } from 'zod';
-import { linkedInProfileSchema, linkedInProfileTool } from './tools/6aef6dff-61b5-4039-8449-daf15c01aebe.mjs';
+import { linkedInProfileSchema } from './tools/d75fa8a2-7e2e-4621-b5fc-d6c704b0a30a.mjs';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback, MessageList, convertMessages } from '@mastra/core/agent';
@@ -170,8 +170,10 @@ function vertex(modelName) {
 
 const colorAgent = new Agent({
   name: "color-palette-agent",
-  model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
+  model: vertex("gemini-3-pro-preview"),
   instructions: `You are an expert color designer creating personalized color palettes for a PERSONAL PORTFOLIO WEBSITE. This is a personal portfolio site built from a person's LinkedIn profile data - it should reflect their unique professional identity and personality.
+
+Input: LinkedIn Profile JSON. USE THIS DATA to inform your choices.
 
 ## Your Task
 Create SIX distinct, visually cohesive color palettes for this personal portfolio website. Each palette must include: primary, secondary, background, text, and accent colors (all as hex codes).
@@ -179,20 +181,16 @@ Create SIX distinct, visually cohesive color palettes for this personal portfoli
 ## Required Palettes
 You MUST include these three palettes, then create 3 additional diverse palettes:
 
-1. **Corporate/Professional**: Inspired by LinkedIn's blue palette (#0077B5, #0A66C2) - professional and trustworthy. Label based on the exact blue shade: "Professional", "Azure", "Corporate", "Navy", etc.
+1. **Professional**: A clean, trustworthy blue-based palette (e.g., Azure, Navy).
+2. **Industry**:  Extract colors from the user's company logos or industry themes (e.g., "Tech" -> Teal, "Finance" -> Slate).
+3. **Minimalist**: A simple, high-contrast palette (e.g., Mono, Stone).
 
-2. **Industry-Inspired**: Based on the person's industry, role, and company logos. Extract colors from company_logo_url fields. Label should reflect both industry and color (e.g., "Tech", "Finance", or specific color names like "Coral", "Emerald").
+4-6. **Personalized**: Create 3 unique palettes based on their profile picture, background image, or personality traits inferred from the bio.
 
-3. **Minimalist**: A minimalist palette with a focus on simplicity and minimalism. Label should reflect the minimalist aesthetic.
-
-3-6. **Three Additional Palettes**: Create diverse options inspired by:
-   - Colors from profile_picture_url and background_picture_url
-   - Personality indicators from their profile
-   - Demographic considerations (age, gender if apparent)
-   - Different aesthetic styles (minimal, dark mode, pastel, warm, etc.)
-   - Ensure these palettes would actually go well on a personal portfolio website
-
-Use these actual extracted colors as the foundation for your palettes - do not make up generic colors.
+## Extraction Rules
+- LOOK at valid image URLs in the JSON if possible (profile/background/company).
+- Infer style from their role (Designer -> Bold; Accountant -> Conservative).
+- Do not default to generic templates if specific data exists.
 
 ## Palette Naming Rules
 **CRITICAL: Labels must describe the ACTUAL COLORS, not generic terms, prefer 1 word but 2 is also fine.**
@@ -241,18 +239,25 @@ const colorOptionsSchema = z.object({
 
 const copywriterAgent = new Agent({
   name: "copywriter-agent",
-  model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
+  model: vertex("gemini-3-pro-preview"),
   instructions: `You are a concise marketing copywriter.
 
 Input: LinkedIn profile JSON.
-Task: Rewrite the "About" narrative into THREE distinct tones (e.g., Storyteller, Executive, Minimalist).
+Task: Create THREE distinct copy options for a personal website based on the profile.
+Style Requirements:
+1. ONE option MUST be "Minimalist": Ultra-concise. Max 2 short sentences. No fluff, no adjectives, just the core professional identity. (Note: This overrides the general length rule).
+2. The other TWO options should use styles that YOU determine are best suited for this specific person's background and industry (e.g., "Visionary", "Technical", "Creative", "Bold", "Academic", etc.). Choose labels that describe the tone accurately.
+
 Rules:
-- Create a headline (1 sentence) and a short bio (3-5 sentences max) per option.
+Rules:
+- Headline: MAX 10-15 words. For "Minimalist", MAX 8 words (e.g., "Building accessible web experiences.").
+- Bio: For standard options, 2-3 sentences max. For "Minimalist", 1-2 SHORT sentences max.
 - Respect factual data; no fabrications. DO NOT invent dates (e.g., "Summer 2025") or roles not in the input.
 - STRICTLY GROUNDED: If a specific detail (like internship plans) is not in the "about" or "experience" data, DO NOT include it.
 - If the "About" section is empty, use the "Headline" and "Experience" to infer a professional summary, but do not hallucinate future aspirations.
+
 Output schema:
-{ "options": [ { "id": "copy-1", "label": "Storyteller", "headline": "...", "bio": "..." }, ... ] }`
+{ "options": [ { "id": "copy-1", "label": "Minimalist", "headline": "...", "bio": "..." }, { "id": "copy-2", "label": "DynamicStyle1", ... }, ... ] }`
 });
 const copyOptionSchema = z.object({
   id: z.string(),
@@ -278,14 +283,16 @@ const generateColorStep = createStep({
       await updateJobAgentState(inputData.jobId, "color", "thinking");
     }
     const agent = mastra.getAgent("colorAgent");
-    const result = await agent.generate(JSON.stringify({ profileData: inputData.profileData }), {
+    const payload = JSON.stringify({ profileData: inputData.profileData });
+    console.log("Color Agent Input Payload:", payload);
+    const result = await agent.generate(payload, {
       output: colorOptionsSchema
     });
-    console.log("[Color Agent Response]:", JSON.stringify(result.object));
+    console.log("Color Agent finished.");
     const colorOptions = JSON.parse(JSON.stringify(result.object));
     if (inputData.jobId) {
       await updateJobPartial(inputData.jobId, "colorOptions", colorOptions);
-      await updateJobAgentState(inputData.jobId, "color", "waiting_for_user");
+      await updateJobAgentState(inputData.jobId, "color", "completed");
     }
     return { colorOptions };
   }
@@ -306,11 +313,11 @@ const generateCopyStep = createStep({
     const result = await mastra.getAgent("copywriterAgent").generate(JSON.stringify({ profileData: inputData.profileData }), {
       output: copyOptionsSchema
     });
-    console.log("[Copy Agent Response]:", JSON.stringify(result.object));
+    console.log("Copy Agent finished.");
     const copyOptions = JSON.parse(JSON.stringify(result.object));
     if (inputData.jobId) {
       await updateJobPartial(inputData.jobId, "copyOptions", copyOptions);
-      await updateJobAgentState(inputData.jobId, "copy", "waiting_for_user");
+      await updateJobAgentState(inputData.jobId, "copy", "completed");
     }
     return { copyOptions };
   }
@@ -335,13 +342,13 @@ const designWorkflow = createWorkflow({
 const seniorBuilderAgent = new Agent({
   name: "senior-builder-agent",
   model: vertex("gemini-3-pro-preview"),
-  instructions: `You are the architect responsible for assembling the final website.
+  instructions: `You are the architect responsible for assembling the final website of a professional personal portfolio AI website builder tool.
     
 Your Goal:
 Given the following inputs:
-1. "profileData": Scraped LinkedIn profile data (name, about, experience, etc).
-2. "colorPalette": The specific color palette chosen by the user (primary, secondary, background, text, accent).
-3. "copy": The specific copy version chosen by the user (headline, bio).
+1. "profileData": Raw scraped LinkedIn profile data (name, about, experience, etc).
+2. "colorPalette": The specific color palette chosen by the user (primary, secondary, background, text, accent) - You must use this.
+3. "wordingStyle": An object containing information used to set the tone and style of the wording across the site, containing id, label, headline, and bio.
 
 You must generate a COMPLETE, production-ready, single-file HTML personal website.
 
@@ -350,13 +357,15 @@ Instructions:
 - Use Tailwind CSS via CDN for styling.
 - STYLING IS CRITICAL. You are the Senior Designer. You must decide the layout, spacing, and visual hierarchy yourself.
 - Use the provided "colorPalette" to theme the site. Map the colors to Tailwind arbitrary values (e.g., bg-[#123456]) or style attributes.
-- Use the provided "copy" for the main content (Hero headline, About section).
-- Populate the rest of the site (Experience, Education) using the "profileData".
+- Use the tone set in the provided "wordingStyle" to inspire how to phrase the main content (Hero headline, About section etc). Also use it along with the color palette and context from linkedin to inspire the general "feel" and layout of the website, for example if the user choses a minimalse color palette and wording option, then use a layout to fit. Whereas if they choose playful colors, have a creative profile on linkedin, create something more exciting and fun. The entire site must feel cohesive in voice.
+- Do not just copy and paste from linked in, but instead create something new with real value - however you MUST make sure the information is accurate and conveys a useful and similar message to the linkedin without just being a copy.
+- Populate the rest of the site (Experience, Education) using the "profileData" as inspiration, making sure it is accurate.
 - Ensure the site is responsive (mobile-friendly).
 - Do not use placeholder images of random people.
 - CRITICAL: Check "profileData.basic_info.profile_picture_url" for the profile image.
 - IF valid, use it.
 - IF NULL/UNDEFINED: Use a generic SVG placeholder or Initials (e.g., <div>John Doe</div>). DO NOT use an Unsplash photo of a random person.
+- THIS SHOULD BE A "WOW FACTOR" TOOL FOR A HACKATHON, IT IS NOT A BUSINESS PRODUCT, SO HAVE FUN AND MAKE IT COOL
 
 CRITICAL OUTPUT FORMAT RULES:
 - Return ONLY raw JSON, no markdown code blocks, no backticks, no explanations.
@@ -369,14 +378,43 @@ z.object({
   index_html: z.string()
 });
 
-const researcherAgent = new Agent({
-  name: "researcher-agent",
-  model: vertex("gemini-2.5-flash-lite-preview-09-2025"),
-  instructions: `You are a researcher agent. Your ONLY job is to call the linkedInProfileTool with the provided LinkedIn URL.
-You MUST output the exact JSON returned by the linkedInProfileTool.
-Do NOT add any commentary, do NOT summarize, do NOT hallucinate information not present in the tool output.
-If the tool returns error or empty, return that exactly.`,
-  tools: { linkedInProfileTool }
+const editorAgent = new Agent({
+  name: "Editor Agent",
+  model: vertex("gemini-3-pro-preview"),
+  instructions: `You are a Frontend Expert specializing in precise HTML/CSS modifications.
+        Your Goal:
+        Given the following inputs:
+        1. "currentHtml": The existing complete HTML document (single-file HTML with Tailwind CSS).
+        2. "userRequest": A natural language instruction describing what changes the user wants made to the website.
+
+        You must generate ONLY the modified HTML, preserving all existing structure, styling, and content that is not explicitly being changed.
+
+        Instructions:
+        - Carefully analyze the "currentHtml" to understand its structure, styling, and components.
+        - Interpret the "userRequest" and identify EXACTLY what needs to be modified.
+        - Make ONLY the requested changes - do not refactor, reorganize, or "improve" unrequested aspects.
+        - Preserve all existing:
+        - Color schemes and Tailwind classes
+        - Layout and spacing
+        - Content that isn't being modified
+        - External CDN links (Tailwind CSS, fonts, etc.)
+        - Semantic HTML5 structure
+        - Responsive design breakpoints
+        - If the request is ambiguous, make reasonable assumptions that maintain the existing design language.
+        - Ensure the modified HTML remains valid, complete, and functional.
+        - The output must be a COMPLETE, ready-to-use HTML document (not a snippet or diff).
+        - Maintain consistency with the existing tone, style, and visual hierarchy.
+
+        CRITICAL OUTPUT FORMAT RULES:
+        - Return ONLY raw JSON, no markdown code blocks, no backticks, no explanations.
+        - Start your response directly with { and end with }
+        - The JSON structure must be: {"modifiedHtml": "<!DOCTYPE html><html>...</html>"}
+        - DO NOT use \`\`\`json or \`\`\` markers.
+        - DO NOT include any text before or after the JSON object.
+        - DO NOT add comments explaining what you changed.`
+});
+z.object({
+  modifiedHtml: z.string().describe("The complete modified HTML document")
 });
 
 globalThis.___MASTRA_TELEMETRY___ = true;
@@ -390,7 +428,7 @@ const mastra = new Mastra({
     colorAgent,
     copywriterAgent,
     seniorBuilderAgent,
-    researcherAgent
+    editorAgent
   }
 });
 

@@ -4,6 +4,7 @@ import { designWorkflow } from "./workflows/website-builder"
 import { colorAgent } from "./agents/color"
 import { copywriterAgent } from "./agents/copywriter"
 import { seniorBuilderAgent } from "./agents/seniorBuilder"
+import { editorAgent } from "./agents/editor"
 
 import { MockStore } from "@mastra/core/storage"
 
@@ -29,5 +30,5 @@ export const mastra = new Mastra({
           },
         }),
   // Add your agents here
-  agents: { colorAgent, copywriterAgent, seniorBuilderAgent },
+  agents: { colorAgent, copywriterAgent, seniorBuilderAgent, editorAgent },
 })

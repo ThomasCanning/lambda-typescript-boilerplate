@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { Spinner } from "@/components/ui/spinner"
 import { Button } from "@/components/ui/button"
@@ -35,6 +35,7 @@ type CopyOptions = {
 }
 
 function GeneratePage() {
+  const navigate = useNavigate()
   const { jobId } = Route.useParams()
   const { jobStatus, startPolling, setJobId, submitPaletteCopy } = useGenerate() // Added submitPaletteCopy to destructure
   const [selectedPaletteId, setSelectedPaletteId] = useState<string | null>(null)
@@ -44,7 +45,7 @@ function GeneratePage() {
   useEffect(() => {
     if (jobId) {
       setJobId(jobId)
-      startPolling(jobId)
+      void startPolling(jobId)
     }
   }, [jobId])
 
@@ -165,8 +166,16 @@ function GeneratePage() {
             <Button
               variant="default"
               onClick={() => {
+                void navigate({ to: "/edit/$jobId", params: { jobId } })
+              }}
+            >
+              Edit Website
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => {
                 const blob = new Blob([finalHtml], { type: "text/html" })
-                const url = URL.createObjectURL(blob)
+                const url = URL.createObjectURL(blob) // This URL resolves to a temporary, in-memory representation of the generated HTML.
                 window.open(url, "_blank")
               }}
             >

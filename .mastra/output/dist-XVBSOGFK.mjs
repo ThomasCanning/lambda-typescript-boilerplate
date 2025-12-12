@@ -7,7 +7,7 @@ import '@mastra/core/scores/scoreTraces';
 import '@mastra/core/utils';
 import '@mastra/core';
 import '@mastra/core/workflows';
-import './tools/6aef6dff-61b5-4039-8449-daf15c01aebe.mjs';
+import './tools/d75fa8a2-7e2e-4621-b5fc-d6c704b0a30a.mjs';
 import '@mastra/core/tools';
 import 'apify-client';
 import '@aws-sdk/client-dynamodb';

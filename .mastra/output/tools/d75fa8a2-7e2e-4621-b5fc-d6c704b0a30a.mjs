@@ -98,7 +98,11 @@ async function fetchLinkedInProfiles(profileUrls) {
         username,
         includeEmail: false
       };
-      const run = await client.actor("VhxlqQXRwhW8H5hNV").call(input);
+      const run = await client.actor("VhxlqQXRwhW8H5hNV").call(input, {
+        timeout: 60,
+        // 60 seconds timeout
+        memory: 256
+      });
       const { items } = await client.dataset(run.defaultDatasetId).listItems();
       for (const item of items) {
         const validatedProfile = linkedInProfileSchema.parse(item);
@@ -134,5 +138,9 @@ const linkedInProfileTool = createTool({
     return result;
   }
 });
+const linkedInProfileToolOutputSchema = z.object({
+  profiles: z.array(linkedInProfileSchema),
+  error: z.string().nullable()
+});
 
-export { fetchLinkedInProfiles, linkedInProfileSchema, linkedInProfileTool };
+export { fetchLinkedInProfiles, linkedInProfileSchema, linkedInProfileTool, linkedInProfileToolOutputSchema };
