@@ -18,6 +18,12 @@ output "dns_setup_instructions" {
       "Type:  ALIAS (or ANAME/CNAME with flattening)",
       "Value: ${aws_cloudfront_distribution.web_client[0].domain_name}",
       "TTL:   300",
+      "",
+      "Name:  *.${var.root_domain_name} (or * as wildcard)",
+      "Type:  CNAME",
+      "Value: ${try(aws_cloudfront_distribution.user_sites[0].domain_name, "Pending")}",
+      "TTL:   300",
+      "Note: This enables user subdomains like testsite.${var.root_domain_name}",
       ""
     ] : [
       "",
@@ -79,4 +85,19 @@ output "s3_bucket_name" {
 output "s3_website_endpoint" {
   description = "S3 website endpoint for web client"
   value       = aws_s3_bucket_website_configuration.web_client.website_endpoint
+}
+
+output "user_sites_distribution_domain_name" {
+  description = "CloudFront distribution domain name for user sites (wildcard subdomains)"
+  value       = try(aws_cloudfront_distribution.user_sites[0].domain_name, "Pending - complete certificate validation first")
+}
+
+output "user_sites_distribution_id" {
+  description = "CloudFront distribution ID for user sites"
+  value       = try(aws_cloudfront_distribution.user_sites[0].id, "Pending - complete certificate validation first")
+}
+
+output "user_sites_bucket_name" {
+  description = "S3 bucket name for user sites (to pass to SAM)"
+  value       = aws_s3_bucket.user_sites.id
 }
