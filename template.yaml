@@ -49,6 +49,10 @@ Parameters:
     Type: String
     Description: "Apify API Token for LinkedIn scraping"
     NoEcho: true
+  UserSitesBucketName:
+    Type: String
+    Description: "S3 bucket name for user sites (created by Terraform). Leave empty for dev (dev uses blob download instead)."
+    Default: ""
 
 # Globals section for shared function and API Gateway configuration
 Globals:
@@ -125,6 +129,9 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: src/handlers/auth/authed.authedHandler
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
       Events:
         Api:
           Type: HttpApi
@@ -132,6 +139,9 @@ Resources:
             ApiId: !Ref LambdaHttpApi
             Path: /api/authed
             Method: POST
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -185,6 +195,10 @@ Resources:
             TableName: !Ref UsersTable
         - DynamoDBReadPolicy:
             TableName: !Ref GenerationJobsTable
+        - Statement:
+            - Effect: Allow
+              Action: cognito-idp:AdminConfirmSignUp
+              Resource: !GetAtt UserPool.Arn
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -366,7 +380,7 @@ Resources:
   apiGenerateStartFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/api/generate-start.generateStartHandler
+      Handler: src/handlers/api/generate/start.generateStartHandler
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
@@ -390,12 +404,12 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/api/generate-start.ts
+          - src/handlers/api/generate/start.ts
 
   apiGenerateStatusFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/api/generate-status.generateStatusHandler
+      Handler: src/handlers/api/generate/status.generateStatusHandler
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
@@ -416,12 +430,12 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/api/generate-status.ts
+          - src/handlers/api/generate/status.ts
 
   apiGenerateChoicesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/api/generate-choices.generateChoicesHandler
+      Handler: src/handlers/api/generate/choices.generateChoicesHandler
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
@@ -445,7 +459,7 @@ Resources:
         Target: es2022
         Sourcemap: true
         EntryPoints:
-          - src/handlers/api/generate-choices.ts
+          - src/handlers/api/generate/choices.ts
 
 
 
@@ -484,7 +498,35 @@ Resources:
         EntryPoints:
           - src/handlers/queue/generate-worker.ts
 
-
+  apiUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/edit/upload.handler
+      Environment:
+        Variables:
+          USER_SITES_BUCKET: !Ref UserSitesBucketName
+          USERS_TABLE: !Ref UsersTable
+          ROOT_DOMAIN: !Ref RootDomainName
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit/upload
+            Method: POST
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref UserSitesBucketName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/edit/upload.ts
 
 Outputs:
   HttpApiId:

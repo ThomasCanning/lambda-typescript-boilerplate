@@ -60,12 +60,18 @@ export async function verifyBearerFromEvent(
 
   try {
     const verifier = getVerifier(userPoolId, userPoolClientId)
-    // Verify token: checks signature, issuer, expiration, client ID, and token use
     const payload = await verifier.verify(token)
 
-    const username = (payload.username || payload["cognito:username"] || payload.sub) as string
+    if (!payload.sub || typeof payload.sub !== "string") {
+      throw createProblemDetails({
+        type: errorTypes.unauthorized,
+        status: StatusCodes.UNAUTHORIZED,
+        detail: "Invalid token: missing subject claim",
+        title: "Unauthorized",
+      })
+    }
 
-    return { username, claims: payload, bearerToken: token }
+    return { username: payload.sub, claims: payload, bearerToken: token }
   } catch (error) {
     // If it's already a ProblemDetails error, re-throw it
     if (isProblemDetails(error)) {

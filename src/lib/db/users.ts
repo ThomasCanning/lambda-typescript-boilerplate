@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb"
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
 
 // --- Types ---
 
@@ -8,6 +8,7 @@ export interface User {
   email: string
   createdAt: string
   updatedAt: string
+  subdomain?: string
   websiteData: WebsiteData
 }
 
@@ -68,6 +69,8 @@ function createDynamoClient() {
   })
 }
 
+// --- Accessors ---
+
 export async function getUser(userId: string): Promise<User | null> {
   const tableName = process.env.USERS_TABLE
   if (!tableName) {
@@ -89,4 +92,24 @@ export async function getUser(userId: string): Promise<User | null> {
     console.error(`[getUser] Failed to fetch user ${userId}`, error)
     throw error
   }
+}
+
+export async function updateUserSubdomain(userId: string, subdomain: string) {
+  const tableName = process.env.USERS_TABLE
+  if (!tableName) {
+    throw new Error("Missing required environment variable: USERS_TABLE")
+  }
+  const client = createDynamoClient()
+
+  await client.send(
+    new UpdateCommand({
+      TableName: tableName,
+      Key: { userId },
+      UpdateExpression: "SET subdomain = :subdomain, updatedAt = :updatedAt",
+      ExpressionAttributeValues: {
+        ":subdomain": subdomain,
+        ":updatedAt": new Date().toISOString(),
+      },
+    })
+  )
 }
