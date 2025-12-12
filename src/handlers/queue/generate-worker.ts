@@ -26,7 +26,7 @@ function getEnvVar(name: string): string {
 function createDynamoClient() {
   const config: DynamoDBClientConfig = {}
   if (process.env.AWS_REGION) config.region = process.env.AWS_REGION
-  if (process.env.DDB_ENDPOINT) config.endpoint = process.env.DDB_ENDPOINT
+
   return DynamoDBDocumentClient.from(new DynamoDBClient(config))
 }
 
