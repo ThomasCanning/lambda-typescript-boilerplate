@@ -10,6 +10,7 @@ interface FloatingEditorBarProps {
   onToggleDraw: () => void
   hasScreenshot: boolean
   onClearScreenshot: () => void
+  onInputFocus?: () => void
   isLoading?: boolean
 }
 
@@ -19,6 +20,7 @@ export function FloatingEditorBar({
   onToggleDraw,
   hasScreenshot,
   onClearScreenshot,
+  onInputFocus,
   isLoading,
 }: FloatingEditorBarProps) {
   const [prompt, setPrompt] = useState("")
@@ -60,6 +62,7 @@ export function FloatingEditorBar({
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Describe how to change the selected area..."
           className="border-0 focus-visible:ring-0 bg-transparent shadow-none h-10 px-2"
+          onFocus={onInputFocus}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()

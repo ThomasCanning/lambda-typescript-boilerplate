@@ -2,20 +2,20 @@ import { mastra } from "../../mastra"
 import { selectRegionSchema } from "../../mastra/agents/selectAgent"
 
 export async function selectRegion(screenshot: string, html: string) {
-  const selectAgent = mastra.getAgent("select-agent")
+  const selectAgent = mastra.getAgent("selectAgent")
 
   const messages = [
     {
-      role: "user",
+      role: "user" as const,
       content: [
         {
-          type: "text",
+          type: "text" as const,
           text:
             "The user has drawn a circle around the element they want to edit. Here is the page HTML: \n\n" +
             html,
         },
         {
-          type: "image",
+          type: "image" as const,
           image: screenshot, // Base64 or URL
         },
       ],
