@@ -70,6 +70,7 @@ async function processRecord(record: SQSRecord): Promise<void> {
           finalHtml,
           agentStates: { editor: "completed", planner: "completed" },
         })
+        console.log(`[Job ${jobId}] Edit execution succeeded.`)
       } catch (error) {
         console.error(`[Job ${jobId}] Edit execution failed:`, error)
         await editStore.update(jobId, {
@@ -113,6 +114,7 @@ async function processRecord(record: SQSRecord): Promise<void> {
               finalHtml,
               agentStates: { selector: "completed", planner: "completed", editor: "completed" },
             })
+            console.log(`[Job ${jobId}] Edit execution succeeded.`)
           } catch (error) {
             console.error(`[Job ${jobId}] Edit execution failed:`, error)
             await editStore.update(jobId, {

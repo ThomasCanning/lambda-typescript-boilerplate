@@ -1,14 +1,6 @@
 import { Button } from "@/components/ui/button"
-import { LogIn, Code2, ScanSearch, Lightbulb } from "lucide-react"
-import { AgentAvatar } from "../generate/agent-avatar"
-
-type AgentState = "idle" | "thinking" | "completed"
-
-type EditAgentStates = {
-  selector?: AgentState
-  planner?: AgentState
-  editor?: AgentState
-}
+import { LogIn } from "lucide-react"
+import { AgentStatusBar, type EditAgentStates } from "./agent-status-bar"
 
 type EditHeaderTempProps = {
   onSignupClick: () => void
@@ -17,16 +9,8 @@ type EditHeaderTempProps = {
 
 export function EditHeaderTemp({ onSignupClick, agentStates }: EditHeaderTempProps) {
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 border-b bg-background/95 backdrop-blur z-50 flex items-center justify-between px-6">
-      <div className="flex items-center gap-6">
-        <div className="text-lg font-bold">OneClick</div>
-        <div className="w-px h-6 bg-border" />
-        <AgentAvatar icon={ScanSearch} status={agentStates?.selector || "idle"} label="Selector" />
-        <div className="w-8 h-px bg-gray-200" />
-        <AgentAvatar icon={Lightbulb} status={agentStates?.planner || "idle"} label="Planner" />
-        <div className="w-8 h-px bg-gray-200" />
-        <AgentAvatar icon={Code2} status={agentStates?.editor || "idle"} label="Editor" />
-      </div>
+    <header className="fixed top-0 left-0 right-0 h-20 border-b bg-background/95 backdrop-blur z-50 flex items-center justify-between px-6">
+      <AgentStatusBar agentStates={agentStates} />
       <div className="flex gap-2">
         <Button variant="outline" onClick={onSignupClick}>
           <LogIn className="w-4 h-4 mr-2" />

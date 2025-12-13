@@ -7,14 +7,7 @@ import { FloatingEditorBar } from "./floating-editor-bar"
 import { DrawingOverlay } from "./drawing-overlay"
 import { cn } from "@/lib/utils"
 import { toPng } from "html-to-image"
-
-type AgentState = "idle" | "thinking" | "completed"
-
-type EditAgentStates = {
-  selector?: AgentState
-  planner?: AgentState
-  editor?: AgentState
-}
+import type { EditAgentStates } from "./agent-status-bar"
 
 type EditPageProps = {
   renderHeader: (props: { agentStates: EditAgentStates }) => React.ReactNode
@@ -300,7 +293,7 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
   const isProcessing = isSending || !!pollingJobId
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pt-16">
+    <div className="min-h-screen bg-background flex flex-col pt-20">
       {renderHeader({ agentStates })}
       <div className="flex-1 bg-gray-50/50 p-6 overflow-hidden flex flex-col relative">
         {html ? (
