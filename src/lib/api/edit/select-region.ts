@@ -2,7 +2,7 @@ import { mastra } from "../../mastra"
 import { selectRegionSchema } from "../../mastra/agents/selectAgent"
 
 export async function selectRegion(screenshot: string, html: string) {
-  const selectAgent = mastra.getAgent("select-agent")
+  const selectAgent = mastra.getAgent("selectAgent")
 
   const messages = [
     {
