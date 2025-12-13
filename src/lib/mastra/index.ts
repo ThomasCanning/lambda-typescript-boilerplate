@@ -6,6 +6,7 @@ import { copywriterAgent } from "./agents/copywriter"
 import { seniorBuilderAgent } from "./agents/seniorBuilder"
 import { selectAgent } from "./agents/selectAgent"
 import { planAgent } from "./agents/planAgent"
+import { editorAgent } from "./agents/editAgent"
 
 import { MockStore } from "@mastra/core/storage"
 
@@ -31,5 +32,5 @@ export const mastra = new Mastra({
           },
         }),
   // Add your agents here
-  agents: { colorAgent, copywriterAgent, seniorBuilderAgent, selectAgent, planAgent },
+  agents: { colorAgent, copywriterAgent, seniorBuilderAgent, selectAgent, planAgent, editorAgent },
 })
