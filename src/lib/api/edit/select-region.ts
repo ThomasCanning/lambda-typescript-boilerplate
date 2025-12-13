@@ -16,7 +16,10 @@ export async function selectRegion(screenshot: string, html: string) {
         },
         {
           type: "image" as const,
-          image: screenshot, // Base64 or URL
+          image:
+            screenshot.startsWith("data:") || screenshot.startsWith("http")
+              ? screenshot
+              : `data:image/png;base64,${screenshot}`,
         },
       ],
     },
