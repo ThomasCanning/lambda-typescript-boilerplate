@@ -58,7 +58,7 @@ async function processRecord(record: SQSRecord): Promise<void> {
       // Call plan edit flow (leave as TODO)
       console.log(`[Job ${jobId}] Ready for plan edit flow.`)
       await editStore.update(jobId, { status: "running", agentStates: { planner: "thinking" } })
-      const plan = await createEditPlan(jobId, job.selectedHtml)
+      const plan = await createEditPlan(job.prompt!, job.selectedHtml)
       console.log(`[Job ${jobId}] Plan created:`, plan)
       await editStore.update(jobId, { agentStates: { planner: "completed", editor: "thinking" } })
       try {
@@ -99,7 +99,7 @@ async function processRecord(record: SQSRecord): Promise<void> {
             status: "running",
             agentStates: { selector: "completed", planner: "thinking" },
           })
-          const plan = await createEditPlan(jobId, selectedRegionResult.selectedHtml)
+          const plan = await createEditPlan(updatedJob.prompt!, selectedRegionResult.selectedHtml)
 
           console.log(`[Job ${jobId}] Plan created:`, plan)
           await editStore.update(jobId, {
