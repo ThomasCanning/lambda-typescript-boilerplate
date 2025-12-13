@@ -11,6 +11,11 @@ export interface EditJob {
   originalHtml?: string
   finalHtml?: string
   status?: "pending" | "running" | "succeeded" | "failed"
+  agentStates?: {
+    selector?: "idle" | "thinking" | "completed"
+    planner?: "idle" | "thinking" | "completed"
+    editor?: "idle" | "thinking" | "completed"
+  }
   error?: string
 }
 

@@ -30,7 +30,18 @@ export const updateHtmlTool = createTool({
 
     try {
       if (jobId) {
-        await updateJobPartial(jobId, "finalHtml", html)
+        // Try updating generation job (for initial generation flow)
+        try {
+          await updateJobPartial(jobId, "finalHtml", html)
+        } catch (error) {
+          // If it fails (e.g. key path invalid or job not found in gen table), try edit store
+          console.log(
+            `[Tool: update-html] updateJobPartial failed, trying editStore. Msg: ${error instanceof Error ? error.message : "Unknown"}`
+          )
+          const { editStore } = await import("../../api/edit/edit-store")
+          // For edit jobs, we just update 'finalHtml'
+          await editStore.update(jobId, { finalHtml: html })
+        }
       } else if (userId) {
         await updateUserWebsiteData(userId, { indexHtml: html })
       }

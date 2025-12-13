@@ -54,6 +54,11 @@ export const applyEdit = async (event: APIGatewayProxyEventV2, content: WebsiteC
         screenshot: body.screenshot,
         originalHtml: content.html,
         status: "pending",
+        agentStates: {
+          selector: "idle",
+          planner: "idle",
+          editor: "idle",
+        },
       })
     )
 
@@ -96,7 +101,14 @@ export const applyEdit = async (event: APIGatewayProxyEventV2, content: WebsiteC
         })
       )
       // We queued it, so set to pending
-      await editStore.update(body.jobId, { status: "pending" })
+      await editStore.update(body.jobId, {
+        status: "pending",
+        agentStates: {
+          selector: "completed",
+          planner: "idle",
+          editor: "idle",
+        },
+      })
     }
 
     return {

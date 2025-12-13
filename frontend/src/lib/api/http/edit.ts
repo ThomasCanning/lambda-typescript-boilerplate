@@ -26,12 +26,15 @@ export type EditResponse = {
   error?: ProblemDetails
 }
 
-export async function submitEdit(data: {
-  screenshot?: string
-  prompt?: string
-  jobId?: string
-}): Promise<EditResponse> {
-  const path = data.jobId ? `/api/edit/${data.jobId}` : `/api/edit`
+export async function submitEdit(
+  data: {
+    screenshot?: string
+    prompt?: string
+    jobId?: string
+  },
+  pageId?: string
+): Promise<EditResponse> {
+  const path = pageId ? `/api/edit/${pageId}` : `/api/edit`
   const response = await authFetch(path, {
     method: "POST",
     body: JSON.stringify(data),
@@ -49,6 +52,11 @@ export async function submitEdit(data: {
 export type EditStatusResponse = {
   jobId: string
   status: "pending" | "running" | "succeeded" | "failed"
+  agentStates?: {
+    selector?: "idle" | "thinking" | "completed"
+    planner?: "idle" | "thinking" | "completed"
+    editor?: "idle" | "thinking" | "completed"
+  }
   error?: string
 }
 

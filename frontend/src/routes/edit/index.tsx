@@ -101,13 +101,14 @@ function EditAuthedPage() {
       <EditPage
         jobId={undefined}
         onSiteLoaded={setSiteHtml}
-        header={
+        renderHeader={(props) => (
           <EditHeaderAuthed
             onDeployClick={handleDeployClick}
             isDeploying={isDeploying}
             user={user}
+            agentStates={props.agentStates}
           />
-        }
+        )}
       />
 
       <Dialog open={isDeployDialogOpen} onOpenChange={setIsDeployDialogOpen}>

@@ -57,14 +57,19 @@ async function processRecord(record: SQSRecord): Promise<void> {
     if (job.prompt && job.selectedHtml) {
       // Call plan edit flow (leave as TODO)
       console.log(`[Job ${jobId}] Ready for plan edit flow.`)
+      await editStore.update(jobId, { status: "running", agentStates: { planner: "thinking" } })
       const plan = await createEditPlan(jobId, job.selectedHtml)
       console.log(`[Job ${jobId}] Plan created:`, plan)
-      await editStore.update(jobId, { status: "running" })
+      await editStore.update(jobId, { agentStates: { planner: "completed", editor: "thinking" } })
       try {
         const result = await executeEdit({ jobId, plan, fullHtml: job.originalHtml! })
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const finalHtml = (result as any).modifiedHtml
-        await editStore.update(jobId, { status: "succeeded", finalHtml })
+        await editStore.update(jobId, {
+          status: "succeeded",
+          finalHtml,
+          agentStates: { editor: "completed", planner: "completed" },
+        })
       } catch (error) {
         console.error(`[Job ${jobId}] Edit execution failed:`, error)
         await editStore.update(jobId, {
@@ -77,26 +82,37 @@ async function processRecord(record: SQSRecord): Promise<void> {
       // Process screenshot
       console.log(`[Job ${jobId}] Processing screenshot...`)
       try {
+        await editStore.update(jobId, { status: "running", agentStates: { selector: "thinking" } })
         const selectedRegionResult = await selectRegion(job.screenshot, job.originalHtml || "")
         // selectedRegion returns an object, we store it as string for now or if schema returns html
         // Assuming it returns an object with selectedHtml or similar, or just the whole object
         const selectedHtml = JSON.stringify(selectedRegionResult)
 
-        await editStore.update(jobId, { selectedHtml })
+        await editStore.update(jobId, { selectedHtml, agentStates: { selector: "completed" } })
 
         // Check for prompt again
         const updatedJob = await editStore.get(jobId)
         if (updatedJob?.prompt) {
           console.log(`[Job ${jobId}] Prompt arrived. Planning edit flow...`)
+          await editStore.update(jobId, {
+            status: "running",
+            agentStates: { selector: "completed", planner: "thinking" },
+          })
           const plan = await createEditPlan(jobId, selectedRegionResult.selectedHtml)
 
           console.log(`[Job ${jobId}] Plan created:`, plan)
-          await editStore.update(jobId, { status: "running" })
+          await editStore.update(jobId, {
+            agentStates: { selector: "completed", planner: "completed", editor: "thinking" },
+          })
           try {
             const result = await executeEdit({ jobId, plan, fullHtml: updatedJob.originalHtml! })
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const finalHtml = (result as any).modifiedHtml
-            await editStore.update(jobId, { status: "succeeded", finalHtml })
+            await editStore.update(jobId, {
+              status: "succeeded",
+              finalHtml,
+              agentStates: { selector: "completed", planner: "completed", editor: "completed" },
+            })
           } catch (error) {
             console.error(`[Job ${jobId}] Edit execution failed:`, error)
             await editStore.update(jobId, {

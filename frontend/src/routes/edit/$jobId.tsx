@@ -19,7 +19,12 @@ function EditJobPage() {
     <>
       <EditPage
         jobId={jobId}
-        header={<EditHeaderTemp onSignupClick={() => setIsSignupOpen(true)} />}
+        renderHeader={(props) => (
+          <EditHeaderTemp
+            onSignupClick={() => setIsSignupOpen(true)}
+            agentStates={props.agentStates}
+          />
+        )}
       />
       <SignupDialog
         open={isSignupOpen}

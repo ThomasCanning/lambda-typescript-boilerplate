@@ -8,18 +8,27 @@ import { DrawingOverlay } from "./drawing-overlay"
 import { cn } from "@/lib/utils"
 import { toPng } from "html-to-image"
 
+type AgentState = "idle" | "thinking" | "completed"
+
+type EditAgentStates = {
+  selector?: AgentState
+  planner?: AgentState
+  editor?: AgentState
+}
+
 type EditPageProps = {
-  header: React.ReactNode
+  renderHeader: (props: { agentStates: EditAgentStates }) => React.ReactNode
   jobId?: string
   onSiteLoaded?: (html: string) => void
 }
 
-export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
+export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
   const [html, setHtml] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [isDrawing, setIsDrawing] = useState(false)
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const [agentStates, setAgentStates] = useState<EditAgentStates>({})
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const { user, isLoading: userLoading } = useUser()
@@ -166,6 +175,10 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
 
         if (!active) return
 
+        if (status.agentStates) {
+          setAgentStates(status.agentStates)
+        }
+
         if (status.status === "succeeded") {
           // Fetch the new site content (using the job ID we just polled)
           // We can retrieve the content by calling fetchSite with the jobId
@@ -210,7 +223,9 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
       console.log("Uploading screenshot to start edit job...")
       setIsSending(true)
       try {
-        const res = await submitEdit({ screenshot })
+        // If user is signed in, pass undefined. If guest, pass the page jobId.
+        const pageId = user ? undefined : jobId
+        const res = await submitEdit({ screenshot }, pageId)
         if (res.jobId) {
           setEditJobId(res.jobId)
           console.log("Edit job started:", res.jobId)
@@ -234,9 +249,11 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
         // Actually, better to just try uploading first if not present.
         setIsSending(true)
         try {
-          const res = await submitEdit({ screenshot })
+          // If user is signed in, pass undefined. If guest, pass the page jobId.
+          const pageId = user ? undefined : jobId
+          const res = await submitEdit({ screenshot }, pageId)
           if (res.jobId) {
-            await submitEdit({ jobId: res.jobId, prompt })
+            await submitEdit({ jobId: res.jobId, prompt }, pageId)
             // Start polling with the new job ID
             setPollingJobId(res.jobId)
 
@@ -256,7 +273,8 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
 
     setIsSending(true)
     try {
-      await submitEdit({ jobId: editJobId, prompt })
+      const pageId = user ? undefined : jobId
+      await submitEdit({ jobId: editJobId, prompt }, pageId)
 
       // Start polling
       setPollingJobId(editJobId)
@@ -283,7 +301,7 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-16">
-      {header}
+      {renderHeader({ agentStates })}
       <div className="flex-1 bg-gray-50/50 p-6 overflow-hidden flex flex-col relative">
         {html ? (
           <div className="relative w-full flex-1 rounded-xl shadow-lg border bg-white overflow-hidden">

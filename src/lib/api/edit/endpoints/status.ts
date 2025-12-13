@@ -26,6 +26,7 @@ export const getEditStatus = async (jobId: string) => {
   return {
     jobId: job.jobId,
     status: job.status,
+    agentStates: job.agentStates,
     error: job.error,
     // We might want to return result if succeeded, or partials?
     // For now, minimal status.
