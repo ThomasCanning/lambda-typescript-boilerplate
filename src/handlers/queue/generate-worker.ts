@@ -2,6 +2,8 @@ import { SQSRecord } from "aws-lambda/trigger/sqs"
 import { DynamoDBClient, DynamoDBClientConfig } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb"
 import { mastra } from "../../lib/mastra"
+import { createEditPlan } from "../../lib/api/edit/edit-plan"
+import { executeEdit } from "../../lib/api/edit/edit-website"
 import {
   updateJobStatus,
   updateJobAgentState,
@@ -55,7 +57,9 @@ async function processRecord(record: SQSRecord): Promise<void> {
     if (job.prompt && job.selectedHtml) {
       // Call plan edit flow (leave as TODO)
       console.log(`[Job ${jobId}] Ready for plan edit flow.`)
-      // TODO VARNIE: call plan edit flow
+      const plan = await createEditPlan(jobId, job.selectedHtml)
+      console.log(`[Job ${jobId}] Plan created:`, plan)
+      await executeEdit({ jobId, plan, currentHtml: job.selectedHtml })
       return
     } else if (job.screenshot && !job.selectedHtml) {
       // Process screenshot
@@ -72,7 +76,9 @@ async function processRecord(record: SQSRecord): Promise<void> {
         const updatedJob = await editStore.get(jobId)
         if (updatedJob?.prompt) {
           console.log(`[Job ${jobId}] Prompt arrived. Planning edit flow...`)
-          // TODO: Plan edit flow
+          const plan = await createEditPlan(jobId, selectedRegionResult.selectedHtml)
+          console.log(`[Job ${jobId}] Plan created:`, plan)
+          await executeEdit({ jobId, plan, currentHtml: updatedJob.selectedHtml! })
         }
       } catch (error) {
         console.error(`[Job ${jobId}] Error processing screenshot:`, error)

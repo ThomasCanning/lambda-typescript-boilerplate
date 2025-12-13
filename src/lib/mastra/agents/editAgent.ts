@@ -2,7 +2,7 @@ import { Agent } from "@mastra/core/agent"
 import { vertex } from "../providers/vertex"
 import { z } from "zod"
 
-import { updateHtmlTool } from "../tools/updateHtml"
+import { updateHtmlTool } from "../tools/update-html"
 
 export const editorAgent = new Agent({
   name: "Editor Agent",
