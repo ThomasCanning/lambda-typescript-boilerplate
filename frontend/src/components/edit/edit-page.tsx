@@ -20,7 +20,8 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
   const [loading, setLoading] = useState(true)
   const [isDrawing, setIsDrawing] = useState(false)
   const [screenshot, setScreenshot] = useState<string | null>(null)
-  const [isSending, setIsSending] = useState(false)
+  const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false)
+  const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false)
   const [agentStates, setAgentStates] = useState<EditAgentStates>({})
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
@@ -29,7 +30,12 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
   // Job ID for the current editing session (from screenshot upload)
   const [editJobId, setEditJobId] = useState<string | null>(null)
 
+  // ... (useEffect hook content omitted for brevity, it remains unchanged) ...
+
   useEffect(() => {
+    // ... (content of this useEffect is unchanged, just restoring context)
+    // Actually, I can just replace the variable declarations and handler logic.
+    // I will replace from handleInputFocus downwards to be safe and cover all usages.
     if (userLoading) return
 
     let active = true
@@ -37,9 +43,6 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
     // Fetch site content
     const loadSite = async () => {
       try {
-        // If user is signed in, we don't pass the page ID (jobId)
-        // The backend will determine the user's page from auth.
-        // If guest, we pass the jobId.
         const idToFetch = user ? undefined : jobId
         const res = await fetchSite(idToFetch)
 
@@ -60,6 +63,8 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
       active = false
     }
   }, [jobId, onSiteLoaded, user, userLoading])
+
+  // ... (useEffect hook content omitted for brevity, it remains unchanged) ...
 
   const handleDrawComplete = async (box: {
     x: number
@@ -212,9 +217,15 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
   }, [pollingJobId, onSiteLoaded])
 
   const handleInputFocus = async () => {
-    if (screenshot && !editJobId && !isSending && !pollingJobId) {
+    if (
+      screenshot &&
+      !editJobId &&
+      !isUploadingScreenshot &&
+      !isSubmittingPrompt &&
+      !pollingJobId
+    ) {
       console.log("Uploading screenshot to start edit job...")
-      setIsSending(true)
+      setIsUploadingScreenshot(true)
       try {
         // If user is signed in, pass undefined. If guest, pass the page jobId.
         const pageId = user ? undefined : jobId
@@ -226,7 +237,7 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
       } catch (error) {
         console.error("Failed to upload screenshot:", error)
       } finally {
-        setIsSending(false)
+        setIsUploadingScreenshot(false)
       }
     }
   }
@@ -240,7 +251,7 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
         // For now assuming handleInputFocus did its job or we can just try again here if needed.
         // Let's defer to handleInputFocus logic or just block.
         // Actually, better to just try uploading first if not present.
-        setIsSending(true)
+        setIsSubmittingPrompt(true)
         try {
           // If user is signed in, pass undefined. If guest, pass the page jobId.
           const pageId = user ? undefined : jobId
@@ -257,14 +268,14 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
         } catch (error) {
           console.error("Failed to send edit:", error)
         } finally {
-          setIsSending(false)
+          setIsSubmittingPrompt(false)
         }
         return
       }
       return
     }
 
-    setIsSending(true)
+    setIsSubmittingPrompt(true)
     try {
       const pageId = user ? undefined : jobId
       await submitEdit({ jobId: editJobId, prompt }, pageId)
@@ -278,7 +289,7 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
     } catch (error) {
       console.error("Failed to send prompt:", error)
     } finally {
-      setIsSending(false)
+      setIsSubmittingPrompt(false)
     }
   }
 
@@ -290,7 +301,7 @@ export function EditPage({ renderHeader, jobId, onSiteLoaded }: EditPageProps) {
     )
   }
 
-  const isProcessing = isSending || !!pollingJobId
+  const isProcessing = isSubmittingPrompt || !!pollingJobId
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-20">

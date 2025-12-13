@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Send, Pencil, X } from "lucide-react"
+import { Send, Pencil, X, Loader2 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 
@@ -26,6 +26,7 @@ export function FloatingEditorBar({
   const [prompt, setPrompt] = useState("")
 
   const handleSend = () => {
+    if (isLoading) return
     if (prompt.trim()) {
       onSend(prompt)
       setPrompt("")
@@ -60,9 +61,12 @@ export function FloatingEditorBar({
         <Input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe how to change the selected area..."
+          placeholder={
+            isLoading ? "Applying edits..." : "Describe how to change the selected area..."
+          }
           className="border-0 focus-visible:ring-0 bg-transparent shadow-none h-10 px-2"
           onFocus={onInputFocus}
+          disabled={isLoading}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()
@@ -77,7 +81,7 @@ export function FloatingEditorBar({
           size="icon"
           className="rounded-full shrink-0"
         >
-          <Send className="h-4 w-4" />
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
     </div>
