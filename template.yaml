@@ -573,6 +573,7 @@ Resources:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
           USERS_TABLE: !Ref UsersTable
+          GENERATION_QUEUE_URL: !Ref GenerationQueue
       Events:
         ApiWithJobId:
           Type: HttpApi
@@ -591,6 +592,8 @@ Resources:
             TableName: !Ref GenerationJobsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt GenerationQueue.QueueName
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
