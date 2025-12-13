@@ -9,6 +9,9 @@ export interface EditJob {
   prompt?: string
   selectedHtml?: string
   originalHtml?: string
+  finalHtml?: string
+  status?: "pending" | "running" | "succeeded" | "failed"
+  error?: string
 }
 
 export const editStore = {

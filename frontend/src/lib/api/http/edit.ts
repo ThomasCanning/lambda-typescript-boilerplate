@@ -45,3 +45,17 @@ export async function submitEdit(data: {
 
   return resData as EditResponse
 }
+
+export type EditStatusResponse = {
+  jobId: string
+  status: "pending" | "running" | "succeeded" | "failed"
+  error?: string
+}
+
+export async function fetchEditStatus(jobId: string): Promise<EditStatusResponse> {
+  const response = await authFetch(`/api/edit/status/${jobId}`)
+  if (!response.ok) {
+    throw new Error("Failed to fetch status")
+  }
+  return response.json() as Promise<EditStatusResponse>
+}

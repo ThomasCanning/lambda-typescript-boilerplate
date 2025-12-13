@@ -14,12 +14,28 @@ export async function fetchWebsiteContent(event: APIGatewayProxyEventV2): Promis
   const jobId = event.pathParameters?.jobId
 
   if (jobId) {
-    // 1. Fetch from generate table
-    const status = await getGenerateStatus(jobId)
-
-    return {
-      html: status.partials?.finalHtml,
-      source: "generate",
+    try {
+      // 1. Fetch from generate table
+      const status = await getGenerateStatus(jobId)
+      return {
+        html: status.partials?.finalHtml,
+        source: "generate",
+      }
+    } catch (error) {
+      // 2. Try edit table
+      try {
+        const { editStore } = await import("./edit-store")
+        const editJob = await editStore.get(jobId)
+        if (editJob && editJob.finalHtml) {
+          return {
+            html: editJob.finalHtml,
+            source: "generate",
+          }
+        }
+      } catch (innerError) {
+        console.warn("Failed to fetch from edit store", innerError)
+      }
+      throw error
     }
   } else {
     // 2. Fetch from user object (requires auth)

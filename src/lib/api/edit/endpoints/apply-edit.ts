@@ -53,6 +53,7 @@ export const applyEdit = async (event: APIGatewayProxyEventV2, content: WebsiteC
       editStore.update(editJobId, {
         screenshot: body.screenshot,
         originalHtml: content.html,
+        status: "pending",
       })
     )
 
@@ -78,6 +79,8 @@ export const applyEdit = async (event: APIGatewayProxyEventV2, content: WebsiteC
 
   if (body.prompt && body.jobId) {
     const { editStore } = await import("../edit-store")
+    // If we're just updating prompt, we don't necessarily change status unless we queue it
+    // But if we queue it below, we might want to set pending.
     await editStore.update(body.jobId, { prompt: body.prompt })
 
     const job = await editStore.get(body.jobId)
@@ -92,6 +95,8 @@ export const applyEdit = async (event: APIGatewayProxyEventV2, content: WebsiteC
           }),
         })
       )
+      // We queued it, so set to pending
+      await editStore.update(body.jobId, { status: "pending" })
     }
 
     return {

@@ -59,7 +59,19 @@ async function processRecord(record: SQSRecord): Promise<void> {
       console.log(`[Job ${jobId}] Ready for plan edit flow.`)
       const plan = await createEditPlan(jobId, job.selectedHtml)
       console.log(`[Job ${jobId}] Plan created:`, plan)
-      await executeEdit({ jobId, plan, currentHtml: job.selectedHtml })
+      await editStore.update(jobId, { status: "running" })
+      try {
+        const result = await executeEdit({ jobId, plan, fullHtml: job.originalHtml! })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const finalHtml = (result as any).modifiedHtml
+        await editStore.update(jobId, { status: "succeeded", finalHtml })
+      } catch (error) {
+        console.error(`[Job ${jobId}] Edit execution failed:`, error)
+        await editStore.update(jobId, {
+          status: "failed",
+          error: error instanceof Error ? error.message : "Unknown error",
+        })
+      }
       return
     } else if (job.screenshot && !job.selectedHtml) {
       // Process screenshot
@@ -77,8 +89,22 @@ async function processRecord(record: SQSRecord): Promise<void> {
         if (updatedJob?.prompt) {
           console.log(`[Job ${jobId}] Prompt arrived. Planning edit flow...`)
           const plan = await createEditPlan(jobId, selectedRegionResult.selectedHtml)
+
           console.log(`[Job ${jobId}] Plan created:`, plan)
-          await executeEdit({ jobId, plan, currentHtml: updatedJob.selectedHtml! })
+          await editStore.update(jobId, { status: "running" })
+          try {
+            const result = await executeEdit({ jobId, plan, fullHtml: updatedJob.originalHtml! })
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const finalHtml = (result as any).modifiedHtml
+            await editStore.update(jobId, { status: "succeeded", finalHtml })
+          } catch (error) {
+            console.error(`[Job ${jobId}] Edit execution failed:`, error)
+            await editStore.update(jobId, {
+              status: "failed",
+              error: error instanceof Error ? error.message : "Unknown error",
+            })
+          }
+          // TODO update job status in dynamo to done
         }
       } catch (error) {
         console.error(`[Job ${jobId}] Error processing screenshot:`, error)

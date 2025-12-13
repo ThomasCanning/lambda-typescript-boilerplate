@@ -5,10 +5,10 @@ export interface ExecuteEditInput {
   jobId?: string
   userId?: string
   plan: unknown
-  currentHtml: string
+  fullHtml: string
 }
 
-export async function executeEdit({ jobId, userId, plan, currentHtml }: ExecuteEditInput) {
+export async function executeEdit({ jobId, userId, plan, fullHtml }: ExecuteEditInput) {
   const editorAgent = mastra.getAgent("editorAgent")
 
   const idString = jobId ? `Job ID: ${jobId}` : `User ID: ${userId}`
@@ -18,7 +18,7 @@ export async function executeEdit({ jobId, userId, plan, currentHtml }: ExecuteE
     ${idString}
     
     CURRENT HTML:
-    ${currentHtml}
+    ${fullHtml}
 
     USER REQUEST (IMPLEMENTATION PLAN):
     ${JSON.stringify(plan, null, 2)}

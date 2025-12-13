@@ -552,6 +552,9 @@ Resources:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
           USERS_TABLE: !Ref UsersTable
+          EDIT_JOBS_TABLE: !Ref EditJobsTable
+          USER_POOL_CLIENT_ID: !Ref UserPoolClient
+          USER_POOL_ID: !Ref UserPool
       Events:
         ApiWithJobId:
           Type: HttpApi
@@ -570,6 +573,8 @@ Resources:
             TableName: !Ref GenerationJobsTable
         - DynamoDBReadPolicy:
             TableName: !Ref UsersTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref EditJobsTable
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -589,6 +594,8 @@ Resources:
           EDIT_JOBS_TABLE: !Ref EditJobsTable
           USERS_TABLE: !Ref UsersTable
           GENERATION_QUEUE_URL: !Ref GenerationQueue
+          USER_POOL_CLIENT_ID: !Ref UserPoolClient
+          USER_POOL_ID: !Ref UserPool
       Events:
         ApiWithJobId:
           Type: HttpApi
@@ -619,6 +626,32 @@ Resources:
         Sourcemap: true
         EntryPoints:
           - src/handlers/api/edit/post.ts
+
+  apiEditStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/api/edit/status.handler
+      Environment:
+        Variables:
+          EDIT_JOBS_TABLE: !Ref EditJobsTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LambdaHttpApi
+            Path: /api/edit/status/{jobId}
+            Method: GET
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref EditJobsTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - src/handlers/api/edit/status.ts
 
 
 Outputs:

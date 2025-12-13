@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from "react"
-import { fetchSite, submitEdit } from "@/lib/api"
+import { useUser } from "@/lib/api/hooks/use-user"
+import { fetchSite, submitEdit, fetchEditStatus } from "@/lib/api"
+import { toast } from "sonner"
 import { Spinner } from "@/components/ui/spinner"
 import { FloatingEditorBar } from "./floating-editor-bar"
 import { DrawingOverlay } from "./drawing-overlay"
@@ -20,16 +22,25 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
   const [isSending, setIsSending] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
+  const { user, isLoading: userLoading } = useUser()
+
   // Job ID for the current editing session (from screenshot upload)
   const [editJobId, setEditJobId] = useState<string | null>(null)
 
   useEffect(() => {
+    if (userLoading) return
+
     let active = true
 
     // Fetch site content
     const loadSite = async () => {
       try {
-        const res = await fetchSite(jobId)
+        // If user is signed in, we don't pass the page ID (jobId)
+        // The backend will determine the user's page from auth.
+        // If guest, we pass the jobId.
+        const idToFetch = user ? undefined : jobId
+        const res = await fetchSite(idToFetch)
+
         if (active && res.html) {
           setHtml(res.html)
           onSiteLoaded?.(res.html)
@@ -46,7 +57,7 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
     return () => {
       active = false
     }
-  }, [jobId, onSiteLoaded])
+  }, [jobId, onSiteLoaded, user, userLoading])
 
   const handleDrawComplete = async (box: {
     x: number
@@ -141,8 +152,61 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
     }
   }
 
+  const [pollingJobId, setPollingJobId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!pollingJobId) return
+
+    let timeoutId: NodeJS.Timeout
+    let active = true
+
+    const poll = async () => {
+      try {
+        const status = await fetchEditStatus(pollingJobId)
+
+        if (!active) return
+
+        if (status.status === "succeeded") {
+          // Fetch the new site content (using the job ID we just polled)
+          // We can retrieve the content by calling fetchSite with the jobId
+          try {
+            // In edit flow, we might want to fetch by jobId to get the *result* of the edit
+            // The backend's fetchSite (api/edit/{jobId}) now supports checking editStore
+            const res = await fetchSite(pollingJobId)
+            if (res.html) {
+              setHtml(res.html)
+              onSiteLoaded?.(res.html)
+              toast.success("Edit applied successfully!")
+            }
+          } catch (err) {
+            console.error("Failed to fetch updated site", err)
+            toast.error("Edit succeeded but failed to load result.")
+          }
+          setPollingJobId(null)
+        } else if (status.status === "failed") {
+          toast.error(`Edit failed: ${status.error || "Unknown error"}`)
+          setPollingJobId(null)
+        } else {
+          // Continue polling
+          timeoutId = setTimeout(() => void poll(), 2000)
+        }
+      } catch (e) {
+        console.error("Polling failed", e)
+        // Retry
+        timeoutId = setTimeout(() => void poll(), 2000)
+      }
+    }
+
+    void poll()
+
+    return () => {
+      active = false
+      clearTimeout(timeoutId)
+    }
+  }, [pollingJobId, onSiteLoaded])
+
   const handleInputFocus = async () => {
-    if (screenshot && !editJobId && !isSending) {
+    if (screenshot && !editJobId && !isSending && !pollingJobId) {
       console.log("Uploading screenshot to start edit job...")
       setIsSending(true)
       try {
@@ -173,10 +237,12 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
           const res = await submitEdit({ screenshot })
           if (res.jobId) {
             await submitEdit({ jobId: res.jobId, prompt })
-            // Reset
+            // Start polling with the new job ID
+            setPollingJobId(res.jobId)
+
+            // Reset local state
             setScreenshot(null)
             setEditJobId(null)
-            // Trigger site reload?
           }
         } catch (error) {
           console.error("Failed to send edit:", error)
@@ -192,10 +258,12 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
     try {
       await submitEdit({ jobId: editJobId, prompt })
 
+      // Start polling
+      setPollingJobId(editJobId)
+
       // Cleanup after send
       setScreenshot(null)
       setEditJobId(null)
-      // Ideally we should start polling for status or similar
     } catch (error) {
       console.error("Failed to send prompt:", error)
     } finally {
@@ -210,6 +278,8 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
       </div>
     )
   }
+
+  const isProcessing = isSending || !!pollingJobId
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-16">
@@ -253,7 +323,7 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
           setEditJobId(null)
         }}
         onInputFocus={() => void handleInputFocus()}
-        isLoading={isSending}
+        isLoading={isProcessing}
       />
     </div>
   )
