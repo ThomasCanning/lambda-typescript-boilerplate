@@ -4,7 +4,7 @@ import { z } from "zod"
 
 export const seniorBuilderAgent = new Agent({
   name: "senior-builder-agent",
-  model: vertex("gemini-3-pro-preview"),
+  model: vertex("gemini-2.5-flash-lite"),
   instructions: `You are the architect responsible for assembling the final website of a professional personal portfolio AI website builder tool.
     
 Your Goal:
