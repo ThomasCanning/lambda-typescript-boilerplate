@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react"
-import { fetchSite } from "@/lib/api"
+import { fetchSite, submitEdit } from "@/lib/api"
 import { Spinner } from "@/components/ui/spinner"
 import { FloatingEditorBar } from "./floating-editor-bar"
 import { DrawingOverlay } from "./drawing-overlay"
@@ -19,6 +19,9 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  // Job ID for the current editing session (from screenshot upload)
+  const [editJobId, setEditJobId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -52,6 +55,7 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
     height: number
   }) => {
     setIsDrawing(false)
+    setEditJobId(null) // Reset job ID for new screenshot
 
     if (!iframeRef.current?.contentWindow) return
 
@@ -132,30 +136,71 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
 
       const croppedDataUrl = croppedCanvas.toDataURL("image/png")
       setScreenshot(croppedDataUrl)
-
-      // DEBUG: Download screenshot
-      const link = document.createElement("a")
-      link.download = `edit-crop-${Date.now()}.png`
-      link.href = croppedDataUrl
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
     } catch (error) {
       console.error("Screenshot failed:", error)
     }
   }
 
+  const handleInputFocus = async () => {
+    if (screenshot && !editJobId && !isSending) {
+      console.log("Uploading screenshot to start edit job...")
+      setIsSending(true)
+      try {
+        const res = await submitEdit({ screenshot })
+        if (res.jobId) {
+          setEditJobId(res.jobId)
+          console.log("Edit job started:", res.jobId)
+        }
+      } catch (error) {
+        console.error("Failed to upload screenshot:", error)
+      } finally {
+        setIsSending(false)
+      }
+    }
+  }
+
   const handleSend = async (prompt: string) => {
+    if (!editJobId) {
+      // If we don't have a job ID yet (e.g. somehow failed to upload screenshot or user didn't select anything?), we can't send.
+      // But if we have a screenshot and no job ID, maybe we should try uploading now?
+      if (screenshot) {
+        // handleInputFocus handles this, but let's be safe
+        // For now assuming handleInputFocus did its job or we can just try again here if needed.
+        // Let's defer to handleInputFocus logic or just block.
+        // Actually, better to just try uploading first if not present.
+        setIsSending(true)
+        try {
+          const res = await submitEdit({ screenshot })
+          if (res.jobId) {
+            await submitEdit({ jobId: res.jobId, prompt })
+            // Reset
+            setScreenshot(null)
+            setEditJobId(null)
+            // Trigger site reload?
+          }
+        } catch (error) {
+          console.error("Failed to send edit:", error)
+        } finally {
+          setIsSending(false)
+        }
+        return
+      }
+      return
+    }
+
     setIsSending(true)
-    // Mock API call
-    console.log("Sending edit request:", { prompt, screenshot })
+    try {
+      await submitEdit({ jobId: editJobId, prompt })
 
-    // Simulate delay
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    setIsSending(false)
-    setScreenshot(null)
-    // Here we would typically refresh the site or show the updated version
+      // Cleanup after send
+      setScreenshot(null)
+      setEditJobId(null)
+      // Ideally we should start polling for status or similar
+    } catch (error) {
+      console.error("Failed to send prompt:", error)
+    } finally {
+      setIsSending(false)
+    }
   }
 
   if (loading) {
@@ -203,7 +248,11 @@ export function EditPage({ header, jobId, onSiteLoaded }: EditPageProps) {
         isDrawing={isDrawing}
         onToggleDraw={() => setIsDrawing(!isDrawing)}
         hasScreenshot={!!screenshot}
-        onClearScreenshot={() => setScreenshot(null)}
+        onClearScreenshot={() => {
+          setScreenshot(null)
+          setEditJobId(null)
+        }}
+        onInputFocus={() => void handleInputFocus()}
         isLoading={isSending}
       />
     </div>

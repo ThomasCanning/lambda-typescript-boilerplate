@@ -11,6 +11,8 @@ import { fetchLinkedInProfiles } from "../../lib/mastra/tools/linkedin-profile"
 import { finalBuildSchema } from "../../lib/mastra/agents/seniorBuilder"
 import { colorOptionsSchema } from "../../lib/mastra/agents/color"
 import { copyOptionsSchema } from "../../lib/mastra/agents/copywriter"
+import { editStore } from "../../lib/api/edit/edit-store"
+import { selectRegion } from "../../lib/api/edit/select-region"
 import { z } from "zod"
 
 interface QueueMessage {
@@ -19,6 +21,7 @@ interface QueueMessage {
   // Choice fields
   selectedPaletteId?: string
   selectedCopyId?: string
+  type?: "edit" | "prompt"
 }
 
 function getEnvVar(name: string): string {
@@ -39,8 +42,44 @@ const dynamoClient = createDynamoClient()
 async function processRecord(record: SQSRecord): Promise<void> {
   if (!record.body) return
   const message: QueueMessage = JSON.parse(record.body)
-  const { jobId, prompt } = message
+  const { jobId, prompt, type } = message
   if (!jobId) return
+
+  if (type === "edit") {
+    const job = await editStore.get(jobId)
+    if (!job) {
+      console.error(`[Job ${jobId}] Edit job not found in DB`)
+      return
+    }
+
+    if (job.prompt && job.selectedHtml) {
+      // Call plan edit flow (leave as TODO)
+      console.log(`[Job ${jobId}] Ready for plan edit flow.`)
+      // TODO VARNIE: call plan edit flow
+      return
+    } else if (job.screenshot && !job.selectedHtml) {
+      // Process screenshot
+      console.log(`[Job ${jobId}] Processing screenshot...`)
+      try {
+        const selectedRegionResult = await selectRegion(job.screenshot, job.originalHtml || "")
+        // selectedRegion returns an object, we store it as string for now or if schema returns html
+        // Assuming it returns an object with selectedHtml or similar, or just the whole object
+        const selectedHtml = JSON.stringify(selectedRegionResult)
+
+        await editStore.update(jobId, { selectedHtml })
+
+        // Check for prompt again
+        const updatedJob = await editStore.get(jobId)
+        if (updatedJob?.prompt) {
+          console.log(`[Job ${jobId}] Prompt arrived. Planning edit flow...`)
+          // TODO: Plan edit flow
+        }
+      } catch (error) {
+        console.error(`[Job ${jobId}] Error processing screenshot:`, error)
+      }
+      return
+    }
+  }
 
   // Concise log
   console.log(

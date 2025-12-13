@@ -40,41 +40,59 @@ export const applyEdit = async (event: APIGatewayProxyEventV2, content: WebsiteC
     })
   }
 
+  // dynamo table stores screenshot, selectedHtml, and prompt for a job ID
+  // sqs queue will have just editJobId
+
   // Case 1: Screenshot provided - Start new job
+  // Write screenshot to dynamo under editJobId
+  // Send SQS message with editJobId
   if (body.screenshot) {
-    const jobId = randomUUID()
+    const editJobId = randomUUID()
+
+    await import("../edit-store").then(({ editStore }) =>
+      editStore.update(editJobId, {
+        screenshot: body.screenshot,
+        originalHtml: content.html,
+      })
+    )
 
     await sqsClient.send(
       new SendMessageCommand({
         QueueUrl: queueUrl,
         MessageBody: JSON.stringify({
-          jobId,
-          screenshot: body.screenshot,
-          type: "screenshot",
-          websiteContent: content.html, // Pass current content for context
-          source: content.source,
+          jobId: editJobId,
+          type: "edit",
         }),
       })
     )
 
     return {
-      jobId,
+      jobId: editJobId,
       message: "Screenshot received",
     }
   }
 
-  // Case 2: Prompt and Job ID provided - Continue job
+  // Case 2: Prompt and Job ID provided
+  // Write prompt to dynamo under jobId
+  // If dynamo has selectedHtml, send SQS message with editJobId
+
   if (body.prompt && body.jobId) {
-    await sqsClient.send(
-      new SendMessageCommand({
-        QueueUrl: queueUrl,
-        MessageBody: JSON.stringify({
-          jobId: body.jobId,
-          prompt: body.prompt,
-          type: "prompt",
-        }),
-      })
-    )
+    const { editStore } = await import("../edit-store")
+    await editStore.update(body.jobId, { prompt: body.prompt })
+
+    const job = await editStore.get(body.jobId)
+
+    if (job?.selectedHtml) {
+      await sqsClient.send(
+        new SendMessageCommand({
+          QueueUrl: queueUrl,
+          MessageBody: JSON.stringify({
+            jobId: body.jobId,
+            type: "edit",
+          }),
+        })
+      )
+    }
 
     return {
       jobId: body.jobId,

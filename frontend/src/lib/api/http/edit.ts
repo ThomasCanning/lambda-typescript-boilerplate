@@ -7,11 +7,6 @@ export type FetchSiteResponse = {
   error?: ProblemDetails
 }
 
-export type SaveSiteResponse = {
-  success: boolean
-  error?: ProblemDetails
-}
-
 export async function fetchSite(jobId?: string): Promise<FetchSiteResponse> {
   const path = jobId ? `/api/edit/${jobId}` : `/api/edit`
   const response = await authFetch(path)
@@ -25,18 +20,28 @@ export async function fetchSite(jobId?: string): Promise<FetchSiteResponse> {
   return data as FetchSiteResponse
 }
 
-export async function saveSite(prompt: string, jobId?: string): Promise<SaveSiteResponse> {
-  const path = jobId ? `/api/edit/${jobId}` : `/api/edit`
+export type EditResponse = {
+  jobId?: string
+  message?: string
+  error?: ProblemDetails
+}
+
+export async function submitEdit(data: {
+  screenshot?: string
+  prompt?: string
+  jobId?: string
+}): Promise<EditResponse> {
+  const path = data.jobId ? `/api/edit/${data.jobId}` : `/api/edit`
   const response = await authFetch(path, {
     method: "POST",
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify(data),
   })
 
-  const data: unknown = await response.json()
+  const resData: unknown = await response.json()
 
   if (!response.ok) {
-    return { success: false, error: data as ProblemDetails }
+    return { error: resData as ProblemDetails }
   }
 
-  return data as SaveSiteResponse
+  return resData as EditResponse
 }

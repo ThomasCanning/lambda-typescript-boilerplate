@@ -10,4 +10,4 @@ export type {
   GenerateJobStatus,
   GenerateStatusResponse as JobStatus,
 } from "./http/generate"
-export { fetchSite, saveSite } from "./http/edit"
+export { fetchSite, submitEdit } from "./http/edit"

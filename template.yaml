@@ -321,6 +321,17 @@ Resources:
         - AttributeName: userId
           KeyType: HASH
 
+  EditJobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+
   MastraStore:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -473,6 +484,7 @@ Resources:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
           MASTRA_TABLE_NAME: !Ref MastraStore
+          EDIT_JOBS_TABLE: !Ref EditJobsTable
 
           GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
           GENERATION_QUEUE_URL: !Ref GenerationQueue
@@ -487,6 +499,8 @@ Resources:
             TableName: !Ref GenerationJobsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref MastraStore
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EditJobsTable
         - SQSPollerPolicy:
             QueueName: !GetAtt GenerationQueue.QueueName
     Metadata:
@@ -572,6 +586,7 @@ Resources:
       Environment:
         Variables:
           GENERATION_JOBS_TABLE: !Ref GenerationJobsTable
+          EDIT_JOBS_TABLE: !Ref EditJobsTable
           USERS_TABLE: !Ref UsersTable
           GENERATION_QUEUE_URL: !Ref GenerationQueue
       Events:
@@ -590,6 +605,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GenerationJobsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EditJobsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
         - SQSSendMessagePolicy:
