@@ -4,7 +4,7 @@ import { z } from "zod"
 
 export const colorAgent = new Agent({
   name: "color-palette-agent",
-  model: vertex("gemini-3-pro-preview"),
+  model: vertex("gemini-2.5-flash-lite"),
   instructions: `You are an expert color designer creating personalized color palettes for a PERSONAL PORTFOLIO WEBSITE. This is a personal portfolio site built from a person's LinkedIn profile data - it should reflect their unique professional identity and personality.
 
 Input: LinkedIn Profile JSON. USE THIS DATA to inform your choices.

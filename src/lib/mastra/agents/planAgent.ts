@@ -4,7 +4,7 @@ import { z } from "zod"
 
 export const planAgent = new Agent({
   name: "plan-agent",
-  model: vertex("gemini-3-pro-preview"),
+  model: vertex("gemini-2.5-flash-lite"),
   instructions: `You are a Senior Frontend Architect. Your goal is to create a safe, effective implementation plan to modify a specific part of a website based on a user request.
 
 Input:

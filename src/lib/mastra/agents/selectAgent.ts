@@ -4,7 +4,7 @@ import { z } from "zod"
 
 export const selectAgent = new Agent({
   name: "select-agent",
-  model: vertex("gemini-3-pro-preview"),
+  model: vertex("gemini-2.5-flash-lite"),
   instructions: `You are an expert web developer assisting with website edits. You will receive a screenshot of a webpage with a highlighted region (e.g., a red circle) and the corresponding HTML code. Your task is to identify exactly which HTML element is being highlighted.
 
 Input:
